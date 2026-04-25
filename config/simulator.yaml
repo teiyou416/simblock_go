@@ -1,0 +1,8 @@
+simulation:
+    num_nodes: 6000
+      block_interval: 600000 # 10分钟，单位毫秒
+        block_size: 535000     # 约 0.5MB
+          end_time: 100000000    # 模拟结束时间
+
+          network:
+              latency_matrix_file: "./data/latency.txt"
