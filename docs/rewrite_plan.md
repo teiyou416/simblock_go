@@ -23,17 +23,17 @@
 - [x] 全局时间调度器 (`engine/timer.go`) - 基于 `container/heap` 的最小堆
 - [ ] 调度器 Sequence ID 稳定性校验
 
-### 阶段 2：物理网络与节点模型 [进行中]
-- [ ] **Region 建模**：实现 `network/region.go`。
-- [ ] **网络延迟矩阵**：重写 `Network.java` 逻辑，支持加载 `latency.txt`。
-- [ ] **Node 骨架**：实现 `node/node.go`，定义基础属性（NodeID, Region, HashPower）。
-- [ ] **带宽计算**：实现 `GetBandwidth` 和数据传输耗时计算逻辑。
+### 阶段 2：物理网络与节点模型 [已完成]
+- [x] **Region 建模**：实现 `network/region.go`。
+- [x] **网络延迟矩阵**：重写 `Network.java` 逻辑，支持加载 `latency.txt`。
+- [x] **Node 骨架**：实现 `node/node.go`，定义基础属性（NodeID, Region, HashPower）。
+- [x] **带宽计算**：实现 `GetBandwidth` 和数据传输耗时计算逻辑。
 
-### 阶段 3：区块链协议抽象
-- [ ] **Block 结构**：实现 `core/block.go`。支持父块索引、高度和 `ConsensusData any` 字段。
-- [ ] **共识接口定义**：实现 `node/consensus/consensus.go`，定义 `IsReceivedBlockValid` 等方法。
-- [ ] **路由表接口定义**：实现 `node/routing/routing.go`，解耦 `AbstractRoutingTable`。
-- [ ] **PoW 算法实现**：重写 `ProofOfWork.java`，实现难度调整与验证。
+### 阶段 3：区块链协议抽象 [已完成]
+- [x] **Block 结构**：实现 `core/block.go`。支持父块索引、高度和 `ConsensusData any` 字段。
+- [x] **共识接口定义**：实现 `node/consensus/consensus.go`，定义 `IsReceivedBlockValid` 等方法。
+- [x] **路由表接口定义**：实现 `node/routing/routing.go`，解耦 `AbstractRoutingTable`。
+- [x] **PoW 算法实现**：重写 `ProofOfWork.java`，实现难度调整与验证。
 
 ### 阶段 4：消息协议与任务实装 (Tasks)
 - [ ] **挖掘任务**：实现 `tasks/mining_task.go`。
