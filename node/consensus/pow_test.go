@@ -12,6 +12,7 @@ func TestPoWGenesisAndBuildChildBlock(t *testing.T) {
 		InitialDifficulty: 100,
 		TargetInterval:    10,
 		AdjustmentWindow:  3,
+		DifficultyMode:    DifficultyStatic,
 	}, rand.New(rand.NewSource(1)))
 
 	g := pow.GenesisBlock(1)
@@ -41,6 +42,7 @@ func TestPoWReceivedBlockValidation(t *testing.T) {
 		InitialDifficulty: 50,
 		TargetInterval:    10,
 		AdjustmentWindow:  2,
+		DifficultyMode:    DifficultyStatic,
 	}, rand.New(rand.NewSource(2)))
 
 	g := pow.GenesisBlock(1)
@@ -71,6 +73,7 @@ func TestPoWMintingReturnsTaskWithPositiveInterval(t *testing.T) {
 		InitialDifficulty: 100,
 		TargetInterval:    10,
 		AdjustmentWindow:  3,
+		DifficultyMode:    DifficultyStatic,
 	}, rand.New(rand.NewSource(3)))
 
 	g := pow.GenesisBlock(1)
@@ -83,11 +86,29 @@ func TestPoWMintingReturnsTaskWithPositiveInterval(t *testing.T) {
 	}
 }
 
-func TestPoWDifficultyAdjustment(t *testing.T) {
+func TestPoWDefaultModeIsStatic(t *testing.T) {
 	pow := NewPoW(PoWConfig{
 		InitialDifficulty: 100,
 		TargetInterval:    10,
 		AdjustmentWindow:  2,
+		// DifficultyMode intentionally omitted: should default to static.
+	}, rand.New(rand.NewSource(11)))
+
+	g := pow.GenesisBlock(1)
+	b1 := pow.BuildChildBlock(g, 2, 10)
+	b2 := pow.BuildChildBlock(b1, 3, 20)
+	d2, _ := PoWDataFromBlock(b2)
+	if got, want := d2.NextDifficulty, uint64(100); got != want {
+		t.Fatalf("default mode should keep static difficulty: got=%d want=%d", got, want)
+	}
+}
+
+func TestPoWDifficultyAdjustmentDynamicMode(t *testing.T) {
+	pow := NewPoW(PoWConfig{
+		InitialDifficulty: 100,
+		TargetInterval:    10,
+		AdjustmentWindow:  2,
+		DifficultyMode:    DifficultyDynamic,
 	}, rand.New(rand.NewSource(4)))
 
 	g := pow.GenesisBlock(1)

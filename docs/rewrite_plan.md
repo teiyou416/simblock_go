@@ -35,20 +35,20 @@
 - [x] **路由表接口定义**：实现 `node/routing/routing.go`，解耦 `AbstractRoutingTable`。
 - [x] **PoW 算法实现**：重写 `ProofOfWork.java`，实现难度调整与验证。
 
-### 阶段 4：消息协议与任务实装 (Tasks)
-- [ ] **挖掘任务**：实现 `tasks/mining_task.go`。
-- [ ] **标准区块传输**：实现 `tasks/block_message_task.go`。
-- [ ] **致密区块 (Compact Block)**：实现 `tasks/cmpct_block_task.go` 及其对应的 `GetBlockTxn` 逻辑。
-- [ ] **广播协议**：实现 `InvMessage` 和 `RecMessage` 的逻辑流转。
+### 阶段 4：消息协议与任务实装 (Tasks) [已完成]
+- [x] **挖掘任务**：实现 `tasks/mining_task.go`。
+- [x] **标准区块传输**：实现 `tasks/block_message_task.go`。
+- [x] **致密区块 (Compact Block)**：实现 `tasks/cmpct_block_task.go` 及其对应的 `GetBlockTxn` 逻辑。
+- [x] **广播协议**：实现 `InvMessage` 和 `RecMessage` 的逻辑流转。
 
-### 阶段 5：主循环与集成模拟
-- [ ] **Simulator 封装**：实现 `engine/simulator.go` 管理全局节点列表。
-- [ ] **Main 入口实装**：在 `cmd/simblock/main.go` 中串联配置、网络、节点初始化。
-- [ ] **主循环启动**：跑通从第一个创世块生成到第一个区块传播的全流程。
+### 阶段 5：主循环与集成模拟 [已完成]
+- [x] **Simulator 封装**：实现 `engine/simulator.go` 管理全局节点列表。
+- [x] **Main 入口实装**：在 `cmd/simblock/main.go` 中串联配置、网络、节点初始化。
+- [x] **主循环启动**：跑通从第一个创世块生成到第一个区块传播的全流程。
 
-### 阶段 6：数据输出与可视化对齐
-- [ ] **JSON 日志导出**：格式化输出模拟结果，确保兼容 `simblock-visualizer`。
-- [ ] **统计指标采集**：实现传播延迟、孤块率等数据的实时收集。
+### 阶段 6：数据输出与可视化对齐 [已完成]
+- [x] **JSON 日志导出**：格式化输出模拟结果，确保兼容 `simblock-visualizer`。
+- [x] **统计指标采集**：实现传播延迟、孤块率等数据的实时收集。
 
 ### 阶段 7：等效性验证与调优
 - [ ] **随机数序列对齐**：验证 Go 与 Java 随机序列的一致性。

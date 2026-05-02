@@ -9,6 +9,10 @@ type Model struct {
 	download []uint64
 }
 
+func (m *Model) RegionCount() int {
+	return len(m.latency)
+}
+
 func NewModel(
 	latency [][]core.SimTime,
 	uploadBandwidth []uint64,

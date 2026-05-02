@@ -5,6 +5,7 @@ import (
 	"math/rand"
 
 	"github.com/teiyou416/simblock_go/core"
+	"github.com/teiyou416/simblock_go/tasks"
 )
 
 // PoWData is the consensus payload attached to each block.
@@ -14,11 +15,22 @@ type PoWData struct {
 	NextDifficulty  uint64
 }
 
+type DifficultyMode string
+
+const (
+	// DifficultyStatic keeps next difficulty unchanged after genesis.
+	// This matches the current Java SimBlock behavior.
+	DifficultyStatic DifficultyMode = "static"
+	// DifficultyDynamic retargets difficulty at AdjustmentWindow boundaries.
+	DifficultyDynamic DifficultyMode = "dynamic"
+)
+
 // PoWConfig configures the PoW algorithm behavior.
 type PoWConfig struct {
 	InitialDifficulty uint64
 	TargetInterval    core.SimTime
 	AdjustmentWindow  uint64
+	DifficultyMode    DifficultyMode
 }
 
 // PoW implements Algorithm for proof-of-work style chains.
@@ -36,6 +48,9 @@ func NewPoW(cfg PoWConfig, rng *rand.Rand) *PoW {
 	}
 	if cfg.AdjustmentWindow == 0 {
 		cfg.AdjustmentWindow = 1
+	}
+	if cfg.DifficultyMode == "" {
+		cfg.DifficultyMode = DifficultyStatic
 	}
 	if rng == nil {
 		rng = rand.New(rand.NewSource(1))
@@ -66,7 +81,7 @@ func (p *PoW) Minting(currentTip *core.Block, _ int, selfHashPower uint64) core.
 	if interval < 1 {
 		interval = 1
 	}
-	return &powMintingTask{interval: interval}
+	return tasks.NewMiningTask(interval, nil)
 }
 
 func (p *PoW) IsReceivedBlockValid(receivedBlock, currentTip *core.Block) bool {
@@ -138,6 +153,10 @@ func (p *PoW) BuildChildBlock(parent *core.Block, minterID int, now core.SimTime
 }
 
 func (p *PoW) nextDifficulty(parent *core.Block, current uint64) uint64 {
+	if p.cfg.DifficultyMode != DifficultyDynamic {
+		return current
+	}
+
 	height := parent.Height() + 1
 	if height == 0 || height%p.cfg.AdjustmentWindow != 0 {
 		return current
@@ -171,10 +190,3 @@ func PoWDataFromBlock(b *core.Block) (PoWData, bool) {
 	data, ok := b.ConsensusData().(PoWData)
 	return data, ok
 }
-
-type powMintingTask struct {
-	interval core.SimTime
-}
-
-func (t *powMintingTask) Interval() core.SimTime { return t.interval }
-func (t *powMintingTask) Run()                   {}
