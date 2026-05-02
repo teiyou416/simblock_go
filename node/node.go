@@ -7,17 +7,26 @@ import (
 
 // Node is a minimal blockchain node model used by the simulator core.
 type Node struct {
-	id      int
-	region  int
-	tip     *block.Block
-	orphans map[uint64]*block.Block
+	id        int
+	region    int
+	hashPower uint64
+	tip       *block.Block
+	orphans   map[uint64]*block.Block
 }
 
 func New(id, region int) *Node {
+	return NewWithHashPower(id, region, 1)
+}
+
+func NewWithHashPower(id, region int, hashPower uint64) *Node {
+	if hashPower == 0 {
+		hashPower = 1
+	}
 	return &Node{
-		id:      id,
-		region:  region,
-		orphans: make(map[uint64]*block.Block),
+		id:        id,
+		region:    region,
+		hashPower: hashPower,
+		orphans:   make(map[uint64]*block.Block),
 	}
 }
 
@@ -27,6 +36,10 @@ func (n *Node) ID() int {
 
 func (n *Node) Region() int {
 	return n.region
+}
+
+func (n *Node) HashPower() uint64 {
+	return n.hashPower
 }
 
 func (n *Node) Tip() *block.Block {

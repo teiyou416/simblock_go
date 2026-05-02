@@ -30,3 +30,15 @@ func TestReceiveBlockPrefersLongerChain(t *testing.T) {
 		t.Fatal("tip should still be b1")
 	}
 }
+
+func TestNodeHashPower(t *testing.T) {
+	n := NewWithHashPower(7, 2, 12345)
+	if got, want := n.HashPower(), uint64(12345); got != want {
+		t.Fatalf("HashPower(): got=%d want=%d", got, want)
+	}
+
+	n2 := NewWithHashPower(8, 2, 0)
+	if got, want := n2.HashPower(), uint64(1); got != want {
+		t.Fatalf("HashPower() minimum fallback: got=%d want=%d", got, want)
+	}
+}
