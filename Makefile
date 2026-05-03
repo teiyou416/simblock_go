@@ -26,7 +26,7 @@ test-suite:
 
 test-align:
 	@echo "==> Running Java/Go alignment check..."
-	@./scripts/compare_with_java.sh
+	@./scripts/alignment.sh
 
 lint:
 	@echo "==> Running golangci-lint..."

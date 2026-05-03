@@ -12,7 +12,7 @@ go test -v ./tests
 
 if [[ "${1:-}" == "--with-align" ]]; then
   echo "[3/3] java/go alignment check"
-  ./scripts/compare_with_java.sh
+  ./scripts/alignment.sh
 else
   echo "[3/3] alignment skipped (pass --with-align to enable)"
 fi

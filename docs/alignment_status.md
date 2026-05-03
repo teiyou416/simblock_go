@@ -62,7 +62,7 @@ Go 命令：`go run ./cmd/simblock`
 
 使用脚本：
 
-`./scripts/compare_with_java.sh`
+`./scripts/alignment.sh`
 
 当前脚本判定阈值：
 

@@ -25,3 +25,5 @@ More details:
 
 - `docs/testing.md`
 - `docs/rewrite_plan.md`
+- `docs/usage_en.md` (English)
+- `docs/usage_zh.md` (中文)
