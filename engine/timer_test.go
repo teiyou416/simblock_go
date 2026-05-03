@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/teiyou416/simblock_go/core"
@@ -14,7 +15,7 @@ type stubTask struct {
 func (s stubTask) Interval() core.SimTime { return s.interval }
 func (s stubTask) Run()                   { s.run() }
 
-func TestTimerOrdersByTimestampThenSequence(t *testing.T) {
+func TestTimerOrdersByTimestampThenIdentity(t *testing.T) {
 	timer := NewTimer()
 	var executed []string
 
@@ -26,14 +27,30 @@ func TestTimerOrdersByTimestampThenSequence(t *testing.T) {
 		}
 	}
 
-	// Same timestamp, should run in insertion order.
+	// Same timestamp, order is decided by pseudo identity hash.
 	timer.PutTaskAt(mk("first"), 100)
 	timer.PutTaskAt(mk("second"), 100)
 	timer.PutTaskAt(mk("third"), 100)
 
 	timer.RunUntilEmpty()
 
-	want := []string{"first", "second", "third"}
+	entries := []struct {
+		name string
+		seq  uint64
+	}{
+		{name: "first", seq: 0},
+		{name: "second", seq: 1},
+		{name: "third", seq: 2},
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		ha := pseudoIdentityHash(entries[i].seq)
+		hb := pseudoIdentityHash(entries[j].seq)
+		if ha != hb {
+			return ha < hb
+		}
+		return entries[i].seq < entries[j].seq
+	})
+	want := []string{entries[0].name, entries[1].name, entries[2].name}
 	if len(executed) != len(want) {
 		t.Fatalf("unexpected execution count: got=%d want=%d", len(executed), len(want))
 	}
@@ -64,6 +81,9 @@ func TestTimerPutTaskUsesRelativeIntervalAndAdvancesTime(t *testing.T) {
 	timer.RunUntilEmpty()
 
 	wantOrder := []string{"t5", "t10-a", "t10-b"}
+	if pseudoIdentityHash(2) < pseudoIdentityHash(0) {
+		wantOrder = []string{"t5", "t10-b", "t10-a"}
+	}
 	if len(executed) != len(wantOrder) {
 		t.Fatalf("unexpected execution count: got=%d want=%d", len(executed), len(wantOrder))
 	}

@@ -8,6 +8,10 @@ import (
 	"github.com/teiyou416/simblock_go/tasks"
 )
 
+type float64Source interface {
+	Float64() float64
+}
+
 // PoWData is the consensus payload attached to each block.
 type PoWData struct {
 	Difficulty      uint64
@@ -36,10 +40,14 @@ type PoWConfig struct {
 // PoW implements Algorithm for proof-of-work style chains.
 type PoW struct {
 	cfg PoWConfig
-	rng *rand.Rand
+	rng float64Source
 }
 
 func NewPoW(cfg PoWConfig, rng *rand.Rand) *PoW {
+	return NewPoWWithSource(cfg, rng)
+}
+
+func NewPoWWithSource(cfg PoWConfig, rng float64Source) *PoW {
 	if cfg.InitialDifficulty == 0 {
 		cfg.InitialDifficulty = 1
 	}
@@ -77,9 +85,9 @@ func (p *PoW) Minting(currentTip *core.Block, _ int, selfHashPower uint64) core.
 	}
 
 	u := p.rng.Float64()
-	interval := core.SimTime(math.Ceil(-math.Log(1-u) * float64(difficulty) / float64(selfHashPower)))
-	if interval < 1 {
-		interval = 1
+	interval := core.SimTime(-math.Log(1-u) * float64(difficulty) / float64(selfHashPower))
+	if interval < 0 {
+		interval = 0
 	}
 	return tasks.NewMiningTask(interval, nil)
 }

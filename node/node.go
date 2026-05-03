@@ -15,6 +15,30 @@ const (
 	defaultCompactSize    uint64       = 18 * 1000
 )
 
+type sizeBucket struct {
+	count int
+	ratio float64
+}
+
+var churnFailureBuckets = []sizeBucket{
+	{546, 0.01}, {66, 0.02}, {39, 0.03}, {27, 0.04}, {21, 0.05}, {17, 0.06},
+	{14, 0.07}, {12, 0.08}, {11, 0.09}, {10, 0.10}, {9, 0.11}, {8, 0.12},
+	{7, 0.13}, {7, 0.14}, {6, 0.15}, {6, 0.16}, {5, 0.17}, {5, 0.18},
+	{5, 0.19}, {4, 0.20}, {4, 0.21}, {4, 0.22}, {4, 0.23}, {4, 0.24},
+	{3, 0.25}, {3, 0.26}, {3, 0.27}, {3, 0.28}, {3, 0.29}, {3, 0.30},
+	{3, 0.31}, {3, 0.32}, {2, 0.33}, {2, 0.34}, {2, 0.35}, {2, 0.36},
+	{2, 0.37}, {2, 0.38}, {2, 0.39}, {2, 0.40}, {2, 0.41}, {2, 0.42},
+	{2, 0.43}, {2, 0.44}, {2, 0.45}, {2, 0.46}, {2, 0.47}, {2, 0.48},
+	{1, 0.49}, {1, 0.50}, {1, 0.51}, {1, 0.52}, {1, 0.53}, {1, 0.54},
+	{1, 0.55}, {1, 0.56}, {1, 0.57}, {1, 0.58}, {1, 0.59}, {1, 0.60},
+	{1, 0.61}, {1, 0.62}, {1, 0.63}, {1, 0.64}, {1, 0.65}, {1, 0.66},
+	{1, 0.67}, {1, 0.68}, {1, 0.69}, {1, 0.70}, {1, 0.71}, {1, 0.72},
+	{1, 0.73}, {1, 0.74}, {1, 0.75}, {1, 0.76}, {1, 0.77}, {1, 0.78},
+	{1, 0.79}, {1, 0.80}, {1, 0.81}, {1, 0.82}, {1, 0.83}, {1, 0.84},
+	{1, 0.85}, {1, 0.86}, {1, 0.87}, {1, 0.88}, {1, 0.89}, {1, 0.90},
+	{1, 0.91}, {1, 0.92}, {1, 0.93}, {1, 0.94}, {1, 0.95}, {1, 0.96},
+}
+
 type scheduler interface {
 	PutTask(task core.Task)
 	PutTaskAt(task core.Task, timestamp core.SimTime)
@@ -26,6 +50,12 @@ type blockBuilder interface {
 	BuildChildBlock(parent *core.Block, minterID int, now core.SimTime) *core.Block
 }
 
+type randomSource interface {
+	Float64() float64
+	Intn(n int) int
+	Shuffle(n int, swap func(i, j int))
+}
+
 // Node models a simulation node and protocol-side state transitions.
 type Node struct {
 	id        int
@@ -35,7 +65,8 @@ type Node struct {
 	tip     *core.Block
 	orphans map[uint64]*core.Block
 
-	neighbors []*Node
+	outbound []*Node
+	inbound  []*Node
 
 	timer   scheduler
 	network *network.Model
@@ -43,16 +74,18 @@ type Node struct {
 	consensus consensus.Algorithm
 
 	useCompactBlockRelay bool
+	churnNode            bool
 	sendingBlock         bool
 	messageQueue         []tasks.MessageTask
 	downloadingBlocks    map[uint64]*core.Block
 	mintingTask          core.Task
+	numConnections       int
 
 	processingTime core.SimTime
 	blockSize      uint64
 	compactSize    uint64
 	cbrFailureRate float64
-	rng            *rand.Rand
+	rng            randomSource
 
 	onBlockAccepted func(self *Node, block *core.Block, timestamp core.SimTime)
 	onFlowBlock     func(from, to *Node, block *core.Block, transmission, reception core.SimTime)
@@ -75,6 +108,7 @@ func NewWithHashPower(id, region int, hashPower uint64) *Node {
 		processingTime:    defaultProcessingTime,
 		blockSize:         defaultBlockSize,
 		compactSize:       defaultCompactSize,
+		numConnections:    8,
 		rng:               rand.New(rand.NewSource(1)),
 	}
 }
@@ -102,6 +136,31 @@ func (n *Node) SetCompactFailureRate(rate float64) {
 	n.cbrFailureRate = rate
 }
 
+func (n *Node) SetNumConnections(num int) {
+	if num < 0 {
+		num = 0
+	}
+	n.numConnections = num
+}
+
+func (n *Node) NumConnections() int {
+	return n.numConnections
+}
+
+func (n *Node) OutboundCount() int {
+	return len(n.outbound)
+}
+
+func (n *Node) SetChurnNode(churn bool) {
+	n.churnNode = churn
+}
+
+func (n *Node) SetRNG(rng randomSource) {
+	if rng != nil {
+		n.rng = rng
+	}
+}
+
 func (n *Node) SetBlockAcceptedObserver(observer func(self *Node, block *core.Block, timestamp core.SimTime)) {
 	n.onBlockAccepted = observer
 }
@@ -114,19 +173,57 @@ func (n *Node) AddNeighbor(peer *Node) bool {
 	if peer == nil || peer == n {
 		return false
 	}
-	for _, existing := range n.neighbors {
+	for _, existing := range n.outbound {
 		if existing == peer {
 			return false
 		}
 	}
-	n.neighbors = append(n.neighbors, peer)
+	for _, existing := range n.inbound {
+		if existing == peer {
+			return false
+		}
+	}
+	if len(n.outbound) >= n.numConnections {
+		return false
+	}
+	n.outbound = append(n.outbound, peer)
+	return peer.addInbound(n)
+}
+
+func (n *Node) addInbound(peer *Node) bool {
+	if peer == nil || peer == n {
+		return false
+	}
+	n.inbound = append(n.inbound, peer)
 	return true
 }
 
 func (n *Node) Neighbors() []*Node {
-	out := make([]*Node, len(n.neighbors))
-	copy(out, n.neighbors)
+	out := make([]*Node, 0, len(n.outbound)+len(n.inbound))
+	out = append(out, n.outbound...)
+	out = append(out, n.inbound...)
 	return out
+}
+
+func (n *Node) JoinNetwork(nodes []*Node, rng randomSource) {
+	if len(nodes) == 0 || n.numConnections <= 0 {
+		return
+	}
+	candidates := make([]int, 0, len(nodes))
+	for i := range nodes {
+		candidates = append(candidates, i)
+	}
+	if rng != nil {
+		rng.Shuffle(len(candidates), func(i, j int) {
+			candidates[i], candidates[j] = candidates[j], candidates[i]
+		})
+	}
+	for _, idx := range candidates {
+		if len(n.outbound) >= n.numConnections {
+			break
+		}
+		_ = n.AddNeighbor(nodes[idx])
+	}
 }
 
 func (n *Node) ID() int {
@@ -191,15 +288,15 @@ func (n *Node) ReceiveBlock(b *core.Block) bool {
 
 	if n.consensus != nil {
 		if !n.consensus.IsReceivedBlockValid(b, n.tip) {
-			if n.tip == nil || !b.IsOnSameChainAs(n.tip) {
-				n.orphans[b.ID()] = b
+			if _, seen := n.orphans[b.ID()]; !seen && (n.tip == nil || !b.IsOnSameChainAs(n.tip)) {
+				n.addOrphans(b, n.tip)
 			}
 			return false
 		}
 	}
 
 	if n.tip != nil && !n.tip.IsOnSameChainAs(b) {
-		n.orphans[n.tip.ID()] = n.tip
+		n.addOrphans(n.tip, b)
 	}
 
 	n.tip = b
@@ -207,6 +304,25 @@ func (n *Node) ReceiveBlock(b *core.Block) bool {
 	n.startMinting()
 	n.SendInv(b)
 	return true
+}
+
+func (n *Node) addOrphans(orphanBlock, validBlock *core.Block) {
+	if orphanBlock == nil || orphanBlock == validBlock {
+		return
+	}
+	n.orphans[orphanBlock.ID()] = orphanBlock
+	if validBlock != nil {
+		delete(n.orphans, validBlock.ID())
+	}
+	if validBlock == nil || orphanBlock.Height() > validBlock.Height() {
+		n.addOrphans(orphanBlock.Parent(), validBlock)
+		return
+	}
+	if orphanBlock.Height() == validBlock.Height() {
+		n.addOrphans(orphanBlock.Parent(), validBlock.Parent())
+		return
+	}
+	n.addOrphans(orphanBlock, validBlock.Parent())
 }
 
 func (n *Node) startMinting() {
@@ -222,7 +338,7 @@ func (n *Node) startMinting() {
 		n.timer.RemoveTask(n.mintingTask)
 	}
 
-	mineTask := tasks.NewMiningTask(intervalTask.Interval(), func() {
+	mineTask := tasks.NewMiningTaskWithParent(intervalTask.Interval(), n.tip.Height(), func() {
 		builder, ok := n.consensus.(blockBuilder)
 		if !ok {
 			return
@@ -240,7 +356,7 @@ func (n *Node) SendInv(block *core.Block) {
 	if n.timer == nil || n.network == nil || block == nil {
 		return
 	}
-	for _, to := range n.neighbors {
+	for _, to := range n.Neighbors() {
 		n.timer.PutTask(tasks.NewInvMessageTask(n, to, block, n.network))
 	}
 }
@@ -364,7 +480,7 @@ func (n *Node) SendNextBlockMessage() {
 			task = tasks.NewBlockMessageTask(n, to, block, delay, n.network)
 		}
 	case *tasks.GetBlockTxnMessageTask:
-		delay := n.network.TransferTime(n.blockSize, n.region, to.region) + n.processingTime
+		delay := n.network.TransferTime(n.failedBlockSize(), n.region, to.region) + n.processingTime
 		task = tasks.NewBlockMessageTask(n, to, block, delay, n.network)
 	default:
 		n.sendingBlock = false
@@ -373,6 +489,33 @@ func (n *Node) SendNextBlockMessage() {
 
 	n.sendingBlock = true
 	n.timer.PutTask(task)
+}
+
+func (n *Node) failedBlockSize() uint64 {
+	var ratio float64
+	if n.churnNode {
+		ratio = sampleChurnFailureRatio(n.rng.Intn(945))
+	} else {
+		// Java still consumes one random integer even though all entries are 0.01.
+		_ = n.rng.Intn(210)
+		ratio = 0.01
+	}
+	size := uint64(float64(n.blockSize) * ratio)
+	if size == 0 {
+		size = 1
+	}
+	return size
+}
+
+func sampleChurnFailureRatio(index int) float64 {
+	acc := 0
+	for _, bucket := range churnFailureBuckets {
+		acc += bucket.count
+		if index < acc {
+			return bucket.ratio
+		}
+	}
+	return churnFailureBuckets[len(churnFailureBuckets)-1].ratio
 }
 
 func (n *Node) recordBlockAccepted(block *core.Block) {

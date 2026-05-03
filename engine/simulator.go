@@ -3,25 +3,28 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/teiyou416/simblock_go/core"
+	"github.com/teiyou416/simblock_go/internal/javarand"
 	"github.com/teiyou416/simblock_go/network"
 	"github.com/teiyou416/simblock_go/node"
 	"github.com/teiyou416/simblock_go/node/consensus"
+	"github.com/teiyou416/simblock_go/tasks"
 )
 
 type SimulatorConfig struct {
 	NumNodes           int
 	TargetInterval     core.SimTime
 	EndTime            core.SimTime
+	EndBlockHeight     int
 	BlockSize          uint64
 	OutputDir          string
 	RandomSeed         int64
 	ConnectionsPerNode int
+	JavaCompatible     bool
 }
 
 type Stats struct {
@@ -36,7 +39,7 @@ type Simulator struct {
 	cfg     SimulatorConfig
 	timer   *Timer
 	network *network.Model
-	rng     *rand.Rand
+	rng     *javarand.Random
 
 	nodes []*node.Node
 
@@ -46,10 +49,17 @@ type Simulator struct {
 	seenByBlock    map[uint64]map[int]struct{}
 	seenBlocks     map[uint64]*core.Block
 	delays         []core.SimTime
-	propagatedOnce bool
 
 	initialDifficulty uint64
 }
+
+var (
+	javaRegionDistribution = []float64{0.3316, 0.4998, 0.0090, 0.1177, 0.0224, 0.0195}
+	javaDegreeDistribution = []float64{
+		0.025, 0.050, 0.075, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70,
+		0.80, 0.85, 0.90, 0.95, 0.97, 0.97, 0.98, 0.99, 0.995, 1.0,
+	}
+)
 
 func NewSimulator(cfg SimulatorConfig, timer *Timer, net *network.Model) *Simulator {
 	if cfg.NumNodes <= 0 {
@@ -70,11 +80,14 @@ func NewSimulator(cfg SimulatorConfig, timer *Timer, net *network.Model) *Simula
 	if timer == nil {
 		timer = NewTimer()
 	}
+	if cfg.JavaCompatible && cfg.EndBlockHeight <= 0 {
+		cfg.EndBlockHeight = 3
+	}
 	return &Simulator{
 		cfg:         cfg,
 		timer:       timer,
 		network:     net,
-		rng:         rand.New(rand.NewSource(cfg.RandomSeed)),
+		rng:         javarand.New(cfg.RandomSeed),
 		seenByBlock: make(map[uint64]map[int]struct{}),
 		seenBlocks:  make(map[uint64]*core.Block),
 	}
@@ -95,6 +108,14 @@ func (s *Simulator) Setup() error {
 		return fmt.Errorf("network has no regions")
 	}
 
+	if s.cfg.JavaCompatible {
+		s.network.EnableJavaLatencyJitter(s.rng)
+		return s.setupJavaCompatible(regionCount)
+	}
+	return s.setupSimple(regionCount)
+}
+
+func (s *Simulator) setupSimple(regionCount int) error {
 	s.nodes = make([]*node.Node, 0, s.cfg.NumNodes)
 	totalHashPower := uint64(0)
 	for i := 0; i < s.cfg.NumNodes; i++ {
@@ -106,61 +127,111 @@ func (s *Simulator) Setup() error {
 		n.SetCompactFailureRate(0.13)
 		n.SetBlockAcceptedObserver(s.onBlockAccepted)
 		n.SetFlowObserver(s.onFlowBlock)
-
-		pow := consensus.NewPoW(consensus.PoWConfig{
-			InitialDifficulty: 1, // will be set after total hashpower computed
+		n.SetRNG(s.rng)
+		n.SetConsensus(consensus.NewPoWWithSource(consensus.PoWConfig{
+			InitialDifficulty: 1,
 			TargetInterval:    s.cfg.TargetInterval,
 			AdjustmentWindow:  1,
 			DifficultyMode:    consensus.DifficultyStatic,
-		}, rand.New(rand.NewSource(s.rng.Int63())))
-		n.SetConsensus(pow)
+		}, s.rng))
 
 		s.nodes = append(s.nodes, n)
 		totalHashPower += hashPower
+		s.logAddNode(n)
+	}
+	return s.finishSetup(totalHashPower, false)
+}
 
-		s.events = append(s.events, map[string]any{
-			"kind": "add-node",
-			"content": map[string]any{
-				"timestamp": 0,
-				"node-id":   n.ID(),
-				"region-id": n.Region(),
-			},
-		})
+func (s *Simulator) setupJavaCompatible(regionCount int) error {
+	s.nodes = make([]*node.Node, 0, s.cfg.NumNodes)
+	regionList := s.makeRandomListFollowDistribution(javaRegionDistribution, false)
+	degreeList := s.makeRandomListFollowDistribution(javaDegreeDistribution, true)
+	useCBRList := s.makeRandomBoolList(0.964)
+	churnList := s.makeRandomBoolList(0.976)
+
+	totalHashPower := uint64(0)
+	for i := 0; i < s.cfg.NumNodes; i++ {
+		id := i + 1
+		region := regionList[i] % regionCount
+		numConn := degreeList[i] + 1
+		hashPower := s.genMiningPower()
+		useCBR := useCBRList[i]
+		isChurn := churnList[i]
+
+		n := node.NewWithHashPower(id, region, hashPower)
+		n.BindEnvironment(s.timer, s.network)
+		n.SetNumConnections(numConn)
+		n.SetCompactBlockRelay(useCBR)
+		n.SetChurnNode(isChurn)
+		if isChurn {
+			n.SetCompactFailureRate(0.27)
+		} else {
+			n.SetCompactFailureRate(0.13)
+		}
+		n.SetBlockAcceptedObserver(s.onBlockAccepted)
+		n.SetFlowObserver(s.onFlowBlock)
+		n.SetRNG(s.rng)
+		n.SetConsensus(consensus.NewPoWWithSource(consensus.PoWConfig{
+			InitialDifficulty: 1,
+			TargetInterval:    s.cfg.TargetInterval,
+			AdjustmentWindow:  1,
+			DifficultyMode:    consensus.DifficultyStatic,
+		}, s.rng))
+
+		s.nodes = append(s.nodes, n)
+		totalHashPower += hashPower
+		s.logAddNode(n)
 	}
 
-	// Rebind PoW with Java-like static initial difficulty.
+	for _, from := range s.nodes {
+		candidates := make([]int, 0, len(s.nodes))
+		for i := 0; i < len(s.nodes); i++ {
+			candidates = append(candidates, i)
+		}
+		s.rng.Shuffle(len(candidates), func(i, j int) {
+			candidates[i], candidates[j] = candidates[j], candidates[i]
+		})
+		for _, idx := range candidates {
+			if from.OutboundCount() >= from.NumConnections() {
+				break
+			}
+			to := s.nodes[idx]
+			if from.AddNeighbor(to) {
+				s.logAddLink(to, from)
+				s.logAddLink(from, to)
+			}
+		}
+	}
+	return s.finishSetup(totalHashPower, true)
+}
+
+func (s *Simulator) finishSetup(totalHashPower uint64, javaMode bool) error {
 	initialDiff := totalHashPower * uint64(s.cfg.TargetInterval)
 	if initialDiff == 0 {
 		initialDiff = 1
 	}
 	s.initialDifficulty = initialDiff
 	for _, n := range s.nodes {
-		pow := consensus.NewPoW(consensus.PoWConfig{
+		n.SetConsensus(consensus.NewPoWWithSource(consensus.PoWConfig{
 			InitialDifficulty: initialDiff,
 			TargetInterval:    s.cfg.TargetInterval,
 			AdjustmentWindow:  1,
 			DifficultyMode:    consensus.DifficultyStatic,
-		}, rand.New(rand.NewSource(s.rng.Int63())))
-		n.SetConsensus(pow)
+		}, s.rng))
 	}
 
-	// Deterministic directed mesh by ring expansion.
+	if javaMode {
+		return nil
+	}
+
 	for i, from := range s.nodes {
 		for step := 1; step <= s.cfg.ConnectionsPerNode; step++ {
 			to := s.nodes[(i+step)%len(s.nodes)]
 			if from.AddNeighbor(to) {
-				s.events = append(s.events, map[string]any{
-					"kind": "add-link",
-					"content": map[string]any{
-						"timestamp":     0,
-						"begin-node-id": from.ID(),
-						"end-node-id":   to.ID(),
-					},
-				})
+				s.logAddLink(from, to)
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -183,19 +254,22 @@ func (s *Simulator) Run() (Stats, error) {
 	})
 	minter.ReceiveBlock(genesis)
 
-	guard := 0
+	currentBlockHeight := 1
 	for s.timer.HasTask() {
-		if s.cfg.EndTime > 0 && s.timer.CurrentTime() >= s.cfg.EndTime {
+		if s.cfg.JavaCompatible {
+			if nextTask, ok := s.timer.GetTask().(*tasks.MiningTask); ok {
+				if parentHeight, hasParent := nextTask.ParentHeight(); hasParent && int(parentHeight) == currentBlockHeight {
+					currentBlockHeight++
+				}
+				if s.cfg.EndBlockHeight > 0 && currentBlockHeight > s.cfg.EndBlockHeight {
+					break
+				}
+			}
+		} else if s.cfg.EndTime > 0 && s.timer.CurrentTime() >= s.cfg.EndTime {
 			break
 		}
+
 		if !s.timer.RunTask() {
-			break
-		}
-		guard++
-		if s.propagatedOnce && guard > 10 {
-			break
-		}
-		if guard > 2_000_000 {
 			break
 		}
 	}
@@ -225,7 +299,7 @@ func (s *Simulator) pickGenesisMinter() *node.Node {
 	if total == 0 {
 		return s.nodes[0]
 	}
-	r := uint64(s.rng.Int63n(int64(total)))
+	r := uint64(s.rng.Float64() * float64(total))
 	var cum uint64
 	for _, n := range s.nodes {
 		cum += n.HashPower()
@@ -248,10 +322,6 @@ func (s *Simulator) onBlockAccepted(self *node.Node, block *core.Block, timestam
 	if _, exists := seen[self.ID()]; !exists {
 		seen[self.ID()] = struct{}{}
 		s.delays = append(s.delays, timestamp-block.Time())
-	}
-
-	if block.Height() > 0 && len(seen) >= 2 {
-		s.propagatedOnce = true
 	}
 
 	s.events = append(s.events, map[string]any{
@@ -353,4 +423,75 @@ func writeJSONFile(path string, v any) error {
 		return err
 	}
 	return os.WriteFile(path, b, 0o644)
+}
+
+func (s *Simulator) makeRandomListFollowDistribution(distribution []float64, cumulative bool) []int {
+	list := make([]int, 0, s.cfg.NumNodes)
+	idx := 0
+	if cumulative {
+		for ; idx < len(distribution); idx++ {
+			for len(list) <= int(float64(s.cfg.NumNodes)*distribution[idx]) {
+				list = append(list, idx)
+			}
+		}
+		for len(list) < s.cfg.NumNodes {
+			list = append(list, idx)
+		}
+	} else {
+		acc := 0.0
+		for ; idx < len(distribution); idx++ {
+			acc += distribution[idx]
+			for len(list) <= int(float64(s.cfg.NumNodes)*acc) {
+				list = append(list, idx)
+			}
+		}
+		for len(list) < s.cfg.NumNodes {
+			list = append(list, idx)
+		}
+	}
+	s.rng.Shuffle(len(list), func(i, j int) {
+		list[i], list[j] = list[j], list[i]
+	})
+	return list[:s.cfg.NumNodes]
+}
+
+func (s *Simulator) makeRandomBoolList(rate float64) []bool {
+	list := make([]bool, s.cfg.NumNodes)
+	for i := 0; i < s.cfg.NumNodes; i++ {
+		list[i] = i < int(float64(s.cfg.NumNodes)*rate)
+	}
+	s.rng.Shuffle(len(list), func(i, j int) {
+		list[i], list[j] = list[j], list[i]
+	})
+	return list
+}
+
+func (s *Simulator) genMiningPower() uint64 {
+	v := int64(s.rng.NormFloat64()*100000 + 400000)
+	if v < 1 {
+		v = 1
+	}
+	return uint64(v)
+}
+
+func (s *Simulator) logAddNode(n *node.Node) {
+	s.events = append(s.events, map[string]any{
+		"kind": "add-node",
+		"content": map[string]any{
+			"timestamp": 0,
+			"node-id":   n.ID(),
+			"region-id": n.Region(),
+		},
+	})
+}
+
+func (s *Simulator) logAddLink(from, to *node.Node) {
+	s.events = append(s.events, map[string]any{
+		"kind": "add-link",
+		"content": map[string]any{
+			"timestamp":     s.timer.CurrentTime(),
+			"begin-node-id": from.ID(),
+			"end-node-id":   to.ID(),
+		},
+	})
 }

@@ -1,0 +1,13 @@
+bin/
+
+# Generated simulator outputs
+output/*.json
+output_go_compare/*.json
+scripts/results/
+
+# Java build artifacts
+simblock/.gradle/
+simblock/simulator/build/
+
+# OS / editor
+.DS_Store

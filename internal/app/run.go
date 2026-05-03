@@ -32,10 +32,12 @@ func Run() {
 		NumNodes:           config.GlobalConfig.Simulation.NumNodes,
 		TargetInterval:     core.SimTime(config.GlobalConfig.Simulation.BlockInterval),
 		EndTime:            core.SimTime(config.GlobalConfig.Simulation.EndTime),
+		EndBlockHeight:     config.GlobalConfig.Simulation.EndBlockHeight,
 		BlockSize:          uint64(config.GlobalConfig.Simulation.BlockSize),
 		OutputDir:          "output",
 		RandomSeed:         10,
 		ConnectionsPerNode: 8,
+		JavaCompatible:     config.GlobalConfig.Simulation.JavaCompatible,
 	}, timer, netModel)
 
 	stats, err := sim.Run()

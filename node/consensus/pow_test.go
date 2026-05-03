@@ -68,7 +68,7 @@ func TestPoWReceivedBlockValidation(t *testing.T) {
 	}
 }
 
-func TestPoWMintingReturnsTaskWithPositiveInterval(t *testing.T) {
+func TestPoWMintingReturnsTaskWithNonNegativeInterval(t *testing.T) {
 	pow := NewPoW(PoWConfig{
 		InitialDifficulty: 100,
 		TargetInterval:    10,
@@ -81,8 +81,8 @@ func TestPoWMintingReturnsTaskWithPositiveInterval(t *testing.T) {
 	if task == nil {
 		t.Fatal("Minting() returned nil task")
 	}
-	if got := task.Interval(); got <= 0 {
-		t.Fatalf("interval should be positive, got=%d", got)
+	if got := task.Interval(); got < 0 {
+		t.Fatalf("interval should be non-negative, got=%d", got)
 	}
 }
 

@@ -8,10 +8,12 @@ import (
 
 type Config struct {
 	Simulation struct {
-		NumNodes      int   `mapstructure:"num_nodes"`
-		BlockInterval int64 `mapstructure:"block_interval"`
-		BlockSize     int   `mapstructure:"block_size"`
-		EndTime       int64 `mapstructure:"end_time"`
+		NumNodes       int   `mapstructure:"num_nodes"`
+		BlockInterval  int64 `mapstructure:"block_interval"`
+		BlockSize      int   `mapstructure:"block_size"`
+		EndTime        int64 `mapstructure:"end_time"`
+		EndBlockHeight int   `mapstructure:"end_block_height"`
+		JavaCompatible bool  `mapstructure:"java_compatible"`
 	} `mapstructure:"simulation"`
 	Network struct {
 		LatencyMatrixFile string `mapstructure:"latency_matrix_file"`

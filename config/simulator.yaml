@@ -1,8 +1,10 @@
 simulation:
-  num_nodes: 6000
+  num_nodes: 300
   block_interval: 600000 # 10分钟，单位毫秒
   block_size: 535000 # 约 0.5MB
-  end_time: 100000000 # 模拟结束时间
+  end_time: 100000000 # 非 Java 兼容模式使用
+  end_block_height: 3 # Java 兼容模式使用
+  java_compatible: true
 
 network:
   latency_matrix_file: "./data/latency.txt"

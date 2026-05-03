@@ -11,6 +11,7 @@ type scheduledTask struct {
 	task      core.Task
 	timestamp core.SimTime
 	sequence  uint64
+	identity  uint32
 	index     int
 }
 
@@ -21,6 +22,9 @@ func (h taskMinHeap) Len() int { return len(h) }
 func (h taskMinHeap) Less(i, j int) bool {
 	if h[i].timestamp != h[j].timestamp {
 		return h[i].timestamp < h[j].timestamp
+	}
+	if h[i].identity != h[j].identity {
+		return h[i].identity < h[j].identity
 	}
 	return h[i].sequence < h[j].sequence
 }
@@ -51,7 +55,8 @@ func (h *taskMinHeap) Pop() any {
 //
 // Ordering rule:
 // 1) smaller timestamp first
-// 2) for equal timestamps, smaller sequence first (FIFO for same time)
+// 2) for equal timestamps, smaller pseudo identity hash first
+// 3) sequence as final deterministic tie-breaker
 type Timer struct {
 	currentTime core.SimTime
 	nextSeq     uint64
@@ -76,6 +81,17 @@ func taskIdentity(task core.Task) (uintptr, bool) {
 		return 0, false
 	}
 	return v.Pointer(), true
+}
+
+// pseudoIdentityHash approximates Java's object identity hash behavior:
+// deterministic, insertion-order independent, and stable per scheduled task.
+func pseudoIdentityHash(v uint64) uint32 {
+	// SplitMix64 finalizer
+	x := v + 0x9e3779b97f4a7c15
+	x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9
+	x = (x ^ (x >> 27)) * 0x94d049bb133111eb
+	x = x ^ (x >> 31)
+	return uint32(x)
 }
 
 func (t *Timer) CurrentTime() core.SimTime {
@@ -110,6 +126,7 @@ func (t *Timer) PutTaskAt(task core.Task, timestamp core.SimTime) {
 		task:      task,
 		timestamp: timestamp,
 		sequence:  t.nextSeq,
+		identity:  pseudoIdentityHash(t.nextSeq),
 		index:     -1,
 	}
 	t.nextSeq++

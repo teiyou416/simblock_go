@@ -1,12 +1,22 @@
 package network
 
-import "github.com/teiyou416/simblock_go/core"
+import (
+	"math"
+
+	"github.com/teiyou416/simblock_go/core"
+)
+
+type float64Source interface {
+	Float64() float64
+}
 
 // Model is a deterministic network model for the simulator core.
 type Model struct {
 	latency  [][]core.SimTime
 	upload   []uint64
 	download []uint64
+	rng      float64Source
+	jitter   bool
 }
 
 func (m *Model) RegionCount() int {
@@ -26,7 +36,26 @@ func NewModel(
 }
 
 func (m *Model) Latency(fromRegion, toRegion int) core.SimTime {
-	return m.latency[fromRegion][toRegion]
+	mean := m.latency[fromRegion][toRegion]
+	if !m.jitter || m.rng == nil {
+		return mean
+	}
+	if mean <= 5 {
+		return mean
+	}
+	shape := 0.2 * float64(mean)
+	scale := float64(mean - 5)
+	u := m.rng.Float64()
+	if u <= 0 {
+		u = math.SmallestNonzeroFloat64
+	}
+	return core.SimTime(math.Round(scale / math.Pow(u, 1.0/shape)))
+}
+
+// EnableJavaLatencyJitter enables SimBlock Java-style random latency sampling.
+func (m *Model) EnableJavaLatencyJitter(rng float64Source) {
+	m.rng = rng
+	m.jitter = rng != nil
 }
 
 func (m *Model) Bandwidth(fromRegion, toRegion int) uint64 {
