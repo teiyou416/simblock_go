@@ -11,11 +11,11 @@ import (
 )
 
 // Run boots the current SimBlock-Go application skeleton.
-func Run() {
+func Run(args []string) {
 	fmt.Println("Starting SimBlock-Go...")
 
 	// Step 1: load configuration.
-	config.InitConfig()
+	config.InitConfig(args)
 
 	// Step 2: load network latency matrix from configuration.
 	latency, err := network.LoadLatencyMatrix(config.GlobalConfig.Network.LatencyMatrixFile)

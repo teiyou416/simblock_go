@@ -19,6 +19,18 @@ make run
 go run ./cmd/simblock
 ```
 
+命令行参数会覆盖 [config/simulator.yaml](../config/simulator.yaml) 中的同名配置，例如：
+
+```bash
+go run ./cmd/simblock --num-nodes 100 --block-interval 300000 --java-compatible false
+```
+
+如果你想切换到别的 YAML 文件，可以使用 `--config`：
+
+```bash
+go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./data/latency.txt
+```
+
 默认输出会写入 `output/` 目录。
 
 ## 3. 配置模拟参数

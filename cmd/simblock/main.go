@@ -1,7 +1,11 @@
 package main
 
-import "github.com/teiyou416/simblock_go/internal/app"
+import (
+	"os"
+
+	"github.com/teiyou416/simblock_go/internal/app"
+)
 
 func main() {
-	app.Run()
+	app.Run(os.Args[1:])
 }

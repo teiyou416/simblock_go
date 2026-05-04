@@ -19,6 +19,18 @@ You can also run directly:
 go run ./cmd/simblock
 ```
 
+Command-line flags override the same values found in [config/simulator.yaml](../config/simulator.yaml). For example:
+
+```bash
+go run ./cmd/simblock --num-nodes 100 --block-interval 300000 --java-compatible false
+```
+
+To load a different YAML file, pass `--config`:
+
+```bash
+go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./data/latency.txt
+```
+
 Default simulation outputs are written to `output/`.
 
 ## 3. Configure Simulation
