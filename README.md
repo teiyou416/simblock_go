@@ -23,6 +23,12 @@ Use `--config` to point at a different YAML file if needed:
 go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./data/latency.txt
 ```
 
+To enable Java SimBlock compatible mode:
+
+```bash
+go run ./cmd/simblock --num-nodes 100 --block-interval 300000 --java-compatible true --end-block-height 1000
+```
+
 ## Test
 
 ```bash

@@ -23,6 +23,12 @@ go run ./cmd/simblock --num-nodes 100 --block-interval 300000 --java-compatible 
 go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./data/latency.txt
 ```
 
+启用 Java SimBlock 兼容模式：
+
+```bash
+go run ./cmd/simblock --num-nodes 100 --block-interval 300000 --java-compatible true --end-block-height 1000
+```
+
 ## 测试
 
 ```bash
