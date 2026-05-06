@@ -4,7 +4,6 @@
 
 - Go 1.22+ (or the version required by `go.mod`)
 - `make`
-- Optional for Java parity checks: JDK 11 and Gradle wrapper support
 
 ## 2. Build and Run
 
@@ -35,29 +34,18 @@ Default simulation outputs are written to `output/`.
 
 ## 3. Command-Line Arguments
 
-The simulator executable currently does not accept simulation parameters from the command line.
+The simulator executable accepts command-line flags that override the same values from `config/simulator.yaml`.
 
-These commands are valid:
+Supported flags:
 
-```bash
-make run
-go run ./cmd/simblock
-./bin/simblock_go
-```
-
-These commands are not supported yet:
-
-```bash
-go run ./cmd/simblock --num-nodes 100
-./bin/simblock_go --end-block-height 5
-```
-
-Simulation parameters are configured through `config/simulator.yaml`.
-
-Helper scripts do support a small number of command-line arguments:
-
-- `./scripts/run_tests.sh --with-align`: run Go tests, then run one Java/Go alignment check
-- `./scripts/alignment.sh --runs 10`: run Java/Go alignment comparison 10 times
+- `--config`: YAML config file path
+- `--num-nodes`: override `simulation.num_nodes`
+- `--block-interval`: override `simulation.block_interval`
+- `--block-size`: override `simulation.block_size`
+- `--end-time`: override `simulation.end_time`
+- `--end-block-height`: override `simulation.end_block_height`
+- `--java-compatible`: override `simulation.java_compatible`
+- `--latency-matrix-file`: override `network.latency_matrix_file`
 
 ## 4. Configure Simulation
 
@@ -75,7 +63,7 @@ Typical fields:
 - `simulation.java_compatible`: enable Java SimBlock-compatible behavior
 - `network.latency_matrix_file`: latency matrix file path
 
-Use `java_compatible: true` when comparing against the Java version. Use `java_compatible: false` for the normal Go simulation mode.
+Use `java_compatible: false` for the normal Go simulation mode. Keep `java_compatible: true` only when you intentionally want Java-compatible simulation behavior.
 
 ## 5. Run Tests
 
@@ -91,27 +79,7 @@ Or use the helper script:
 ./scripts/run_tests.sh
 ```
 
-## 6. Java/Go Alignment Check
-
-Single-run comparison:
-
-```bash
-./scripts/alignment.sh
-```
-
-Batch comparison:
-
-```bash
-./scripts/alignment.sh --runs 10
-```
-
-Run tests plus alignment in one command:
-
-```bash
-./scripts/run_tests.sh --with-align
-```
-
-## 7. Output Files
+## 6. Output Files
 
 Main output artifacts:
 

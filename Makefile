@@ -1,4 +1,4 @@
-.PHONY: all build run test test-unit test-suite test-align lint clean
+.PHONY: all build run test test-unit test-suite lint clean
 
 APP_NAME := simblock_go
 MAIN_FILE := ./cmd/simblock/main.go
@@ -23,10 +23,6 @@ test-unit:
 test-suite:
 	@echo "==> Running integrated suite..."
 	@go test -v ./tests
-
-test-align:
-	@echo "==> Running Java/Go alignment check..."
-	@./scripts/alignment.sh
 
 lint:
 	@echo "==> Running golangci-lint..."

@@ -1,6 +1,6 @@
 # SimBlock-Go
 
-Go version of SimBlock with Java parity calibration support.
+Go version of SimBlock.
 
 ## Quick Start
 
@@ -25,12 +25,6 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 
 ```bash
 make test
-```
-
-Run with Java/Go alignment check:
-
-```bash
-./scripts/run_tests.sh --with-align
 ```
 
 More details:
