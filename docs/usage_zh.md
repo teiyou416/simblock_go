@@ -33,7 +33,33 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 
 默认输出会写入 `output/` 目录。
 
-## 3. 配置模拟参数
+## 3. 命令行参数
+
+模拟器本体目前还不支持通过命令行直接传入模拟参数。
+
+这些命令是支持的：
+
+```bash
+make run
+go run ./cmd/simblock
+./bin/simblock_go
+```
+
+这些命令目前还不支持：
+
+```bash
+go run ./cmd/simblock --num-nodes 100
+./bin/simblock_go --end-block-height 5
+```
+
+模拟参数需要通过 `config/simulator.yaml` 配置。
+
+辅助脚本支持少量命令行参数：
+
+- `./scripts/run_tests.sh --with-align`：先运行 Go 测试，再运行一次 Java/Go 对齐检查
+- `./scripts/alignment.sh --runs 10`：运行 10 次 Java/Go 对齐对比
+
+## 4. 配置模拟参数
 
 主配置文件：
 
@@ -41,14 +67,17 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 
 常用字段：
 
-- `simulation.num_nodes`
-- `simulation.end_time`
-- `simulation.end_block_height`
-- `simulation.block_interval`
-- `simulation.java_compatible`
-- `network.latency_matrix_file`
+- `simulation.num_nodes`：模拟节点数量
+- `simulation.block_interval`：平均出块间隔，单位毫秒
+- `simulation.block_size`：区块大小，单位字节
+- `simulation.end_time`：普通 Go 模式下的停止时间
+- `simulation.end_block_height`：Java 兼容模式下的停止高度
+- `simulation.java_compatible`：是否启用 Java SimBlock 兼容行为
+- `network.latency_matrix_file`：网络延迟矩阵文件路径
 
-## 4. 运行测试
+如果要和 Java 版对齐，使用 `java_compatible: true`。如果要跑 Go 版自己的普通模拟，使用 `java_compatible: false`。
+
+## 5. 运行测试
 
 运行单元测试 + 集成测试：
 
@@ -62,18 +91,18 @@ make test
 ./scripts/run_tests.sh
 ```
 
-## 5. Java/Go 对齐实验
+## 6. Java/Go 对齐实验
 
 单次对比：
 
 ```bash
-./scripts/compare_with_java.sh
+./scripts/alignment.sh
 ```
 
-批量对比（默认 10 次）：
+批量对比：
 
 ```bash
-./scripts/batch_compare_java_go.sh 10
+./scripts/alignment.sh --runs 10
 ```
 
 测试 + 对齐一条命令：
@@ -82,7 +111,7 @@ make test
 ./scripts/run_tests.sh --with-align
 ```
 
-## 6. 输出文件
+## 7. 输出文件
 
 主要输出文件：
 
