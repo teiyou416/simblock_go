@@ -1,5 +1,7 @@
 # SimBlock-Go
 
+[English](./README.md) | [中文](./README_zh.md)
+
 Go version of SimBlock.
 
 ## Quick Start
@@ -27,8 +29,10 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 make test
 ```
 
-More details:
+## Documentation
 
-- `docs/testing.md`
-- `docs/usage_en.md` (English)
-- `docs/usage_zh.md` (中文)
+For more details, please refer to:
+
+- [Testing Guide](./docs/testing.md)
+- [Usage Guide (English)](./docs/usage_en.md)
+- [Usage Guide (中文)](./docs/usage_zh.md)
