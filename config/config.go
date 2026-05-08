@@ -20,7 +20,12 @@ type Config struct {
 		JavaCompatible bool  `mapstructure:"java_compatible"`
 	} `mapstructure:"simulation"`
 	Network struct {
-		LatencyMatrixFile string `mapstructure:"latency_matrix_file"`
+		LatencyMatrixFile  string    `mapstructure:"latency_matrix_file"`
+		Profile            string    `mapstructure:"profile"`
+		UploadBandwidth    []uint64  `mapstructure:"upload_bandwidth"`
+		DownloadBandwidth  []uint64  `mapstructure:"download_bandwidth"`
+		RegionDistribution []float64 `mapstructure:"region_distribution"`
+		DegreeDistribution []float64 `mapstructure:"degree_distribution"`
 	} `mapstructure:"network"`
 }
 
@@ -48,6 +53,7 @@ func LoadConfig(args []string) (Config, error) {
 	flagSet.Int("end-block-height", 0, "override simulation.end_block_height")
 	flagSet.String("java-compatible", "", "override simulation.java_compatible")
 	flagSet.String("latency-matrix-file", "", "override network.latency_matrix_file")
+	flagSet.String("network-profile", "", "override network.profile")
 
 	if err := flagSet.Parse(args); err != nil {
 		return Config{}, err
@@ -80,6 +86,9 @@ func LoadConfig(args []string) (Config, error) {
 		return Config{}, err
 	}
 	if err := applyStringOverride(v, flagSet.Lookup("latency-matrix-file"), "network.latency_matrix_file"); err != nil {
+		return Config{}, err
+	}
+	if err := applyStringOverride(v, flagSet.Lookup("network-profile"), "network.profile"); err != nil {
 		return Config{}, err
 	}
 

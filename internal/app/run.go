@@ -24,7 +24,20 @@ func Run(args []string) {
 	}
 	log.Printf("Latency matrix loaded: %dx%d", len(latency), len(latency[0]))
 
-	upload, download := defaultBandwidths(len(latency))
+	profile, ok := network.ProfileByName(config.GlobalConfig.Network.Profile)
+	if !ok {
+		log.Fatalf("unknown network profile: %q", config.GlobalConfig.Network.Profile)
+	}
+	profile = profile.WithOverrides(network.ProfileOverrides{
+		UploadBandwidth:    config.GlobalConfig.Network.UploadBandwidth,
+		DownloadBandwidth:  config.GlobalConfig.Network.DownloadBandwidth,
+		RegionDistribution: config.GlobalConfig.Network.RegionDistribution,
+		DegreeDistribution: config.GlobalConfig.Network.DegreeDistribution,
+	})
+	if err := profile.Validate(len(latency)); err != nil {
+		log.Fatalf("invalid network profile: %v", err)
+	}
+	upload, download := profile.Bandwidths(len(latency))
 	netModel := network.NewModel(latency, upload, download)
 	timer := engine.NewTimer()
 
@@ -38,6 +51,7 @@ func Run(args []string) {
 		RandomSeed:         10,
 		ConnectionsPerNode: 8,
 		JavaCompatible:     config.GlobalConfig.Simulation.JavaCompatible,
+		NetworkProfile:     profile,
 	}, timer, netModel)
 
 	stats, err := sim.Run()
@@ -63,17 +77,4 @@ func Run(args []string) {
 		stats.OrphanRate,
 	)
 	log.Printf("  mean_propagation_delay=%.2f", stats.MeanPropagationDelay)
-}
-
-func defaultBandwidths(regionCount int) ([]uint64, []uint64) {
-	uploadDefaults := []uint64{19_200_000, 20_700_000, 5_800_000, 15_700_000, 10_200_000, 11_300_000}
-	downloadDefaults := []uint64{52_000_000, 40_000_000, 18_000_000, 22_800_000, 22_800_000, 29_900_000}
-
-	upload := make([]uint64, regionCount)
-	download := make([]uint64, regionCount)
-	for i := 0; i < regionCount; i++ {
-		upload[i] = uploadDefaults[i%len(uploadDefaults)]
-		download[i] = downloadDefaults[i%len(downloadDefaults)]
-	}
-	return upload, download
 }

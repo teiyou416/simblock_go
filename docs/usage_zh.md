@@ -45,6 +45,7 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 - `--end-time`：覆盖 `simulation.end_time`
 - `--end-block-height`：覆盖 `simulation.end_block_height`
 - `--java-compatible`：覆盖 `simulation.java_compatible`
+- `--network-profile`：覆盖 `network.profile`
 - `--latency-matrix-file`：覆盖 `network.latency_matrix_file`
 
 ## 4. 配置模拟参数
@@ -61,7 +62,12 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 - `simulation.end_time`：普通 Go 模式下的停止时间
 - `simulation.end_block_height`：Java 兼容模式下的停止高度
 - `simulation.java_compatible`：是否启用 Java SimBlock 兼容行为
+- `network.profile`：内置网络 profile 名称，目前支持 `bitcoin_2019`
 - `network.latency_matrix_file`：网络延迟矩阵文件路径
+- `network.upload_bandwidth`：每个地区的上传带宽，单位 bit/s
+- `network.download_bandwidth`：每个地区的下载带宽，单位 bit/s
+- `network.region_distribution`：节点地区分布，所有值建议加和为 `1.0`
+- `network.degree_distribution`：出站连接数累计分布，最后一个值应为 `1.0`
 
 普通 Go 模拟建议使用 `java_compatible: false`。只有需要 Java 兼容行为时才使用 `java_compatible: true`。
 

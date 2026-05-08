@@ -25,6 +25,7 @@ type SimulatorConfig struct {
 	RandomSeed         int64
 	ConnectionsPerNode int
 	JavaCompatible     bool
+	NetworkProfile     network.Profile
 }
 
 type Stats struct {
@@ -60,14 +61,6 @@ type Simulator struct {
 	initialDifficulty uint64
 }
 
-var (
-	javaRegionDistribution = []float64{0.3316, 0.4998, 0.0090, 0.1177, 0.0224, 0.0195}
-	javaDegreeDistribution = []float64{
-		0.025, 0.050, 0.075, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70,
-		0.80, 0.85, 0.90, 0.95, 0.97, 0.97, 0.98, 0.99, 0.995, 1.0,
-	}
-)
-
 func NewSimulator(cfg SimulatorConfig, timer *Timer, net *network.Model) *Simulator {
 	if cfg.NumNodes <= 0 {
 		cfg.NumNodes = 2
@@ -89,6 +82,9 @@ func NewSimulator(cfg SimulatorConfig, timer *Timer, net *network.Model) *Simula
 	}
 	if cfg.JavaCompatible && cfg.EndBlockHeight <= 0 {
 		cfg.EndBlockHeight = 3
+	}
+	if cfg.NetworkProfile.Name == "" {
+		cfg.NetworkProfile = network.Bitcoin2019Profile
 	}
 	return &Simulator{
 		cfg:         cfg,
@@ -151,8 +147,8 @@ func (s *Simulator) setupSimple(regionCount int) error {
 
 func (s *Simulator) setupJavaCompatible(regionCount int) error {
 	s.nodes = make([]*node.Node, 0, s.cfg.NumNodes)
-	regionList := s.makeRandomListFollowDistribution(javaRegionDistribution, false)
-	degreeList := s.makeRandomListFollowDistribution(javaDegreeDistribution, true)
+	regionList := s.makeRandomListFollowDistribution(s.cfg.NetworkProfile.RegionDistribution, false)
+	degreeList := s.makeRandomListFollowDistribution(s.cfg.NetworkProfile.DegreeDistribution, true)
 	useCBRList := s.makeRandomBoolList(0.964)
 	churnList := s.makeRandomBoolList(0.976)
 

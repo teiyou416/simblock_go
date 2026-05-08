@@ -34,7 +34,7 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 
 ## 3. パラメータ
 
-シミュレータ本体は、`config/simulator.yaml` のパラメータ値をで上書きできます。
+シミュレータ本体は、`config/simulator.yaml` のパラメータ値をコマンドライン引数で上書きできます。
 
 対応している引数：
 
@@ -45,6 +45,7 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 - `--end-time`: `simulation.end_time` を上書き
 - `--end-block-height`: `simulation.end_block_height` を上書き
 - `--java-compatible`: `simulation.java_compatible` を上書き
+- `--network-profile`: `network.profile` を上書き
 - `--latency-matrix-file`: `network.latency_matrix_file` を上書き
 
 ## 4. シミュレーション設定
@@ -61,7 +62,12 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 - `simulation.end_time`: 通常の Go モードで使う終了時刻
 - `simulation.end_block_height`: Java 互換モードで使う終了ブロック高
 - `simulation.java_compatible`: Java SimBlock 互換挙動を有効にするか
+- `network.profile`: 組み込みネットワーク profile 名。現在は `bitcoin_2019` をサポート
 - `network.latency_matrix_file`: ネットワーク遅延行列ファイルのパス
+- `network.upload_bandwidth`: 各リージョンのアップロード帯域（bit/s）
+- `network.download_bandwidth`: 各リージョンのダウンロード帯域（bit/s）
+- `network.region_distribution`: リージョンごとのノード分布。合計は `1.0` を推奨
+- `network.degree_distribution`: outbound link 数の累積分布。最後の値は `1.0`
 
 通常の Go シミュレーションでは `java_compatible: false` を推奨します。Java 版 SimBlock に近い挙動が必要な場合だけ `java_compatible: true` を使います。
 

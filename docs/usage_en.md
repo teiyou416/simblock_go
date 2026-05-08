@@ -45,6 +45,7 @@ Supported flags:
 - `--end-time`: override `simulation.end_time`
 - `--end-block-height`: override `simulation.end_block_height`
 - `--java-compatible`: override `simulation.java_compatible`
+- `--network-profile`: override `network.profile`
 - `--latency-matrix-file`: override `network.latency_matrix_file`
 
 ## 4. Configure Simulation
@@ -61,7 +62,12 @@ Typical fields:
 - `simulation.end_time`: stop time for normal Go mode
 - `simulation.end_block_height`: stop height for Java-compatible mode
 - `simulation.java_compatible`: enable Java SimBlock-compatible behavior
+- `network.profile`: built-in network profile name, currently `bitcoin_2019`
 - `network.latency_matrix_file`: latency matrix file path
+- `network.upload_bandwidth`: per-region upload bandwidth in bit/s
+- `network.download_bandwidth`: per-region download bandwidth in bit/s
+- `network.region_distribution`: per-region node distribution; values should sum to `1.0`
+- `network.degree_distribution`: cumulative outbound-link distribution; final value should be `1.0`
 
 Use `java_compatible: false` for the normal Go simulation mode. Keep `java_compatible: true` only when you intentionally want Java-compatible simulation behavior.
 
