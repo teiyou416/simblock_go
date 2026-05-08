@@ -1,6 +1,6 @@
 # SimBlock-Go
 
-[English](./README.md) | [中文](./README_zh.md)
+[English](./README.md) | [中文](./README_zh.md) | [日本語](./README_ja.md)
 
 Go version of SimBlock.
 
@@ -42,3 +42,4 @@ For more details, please refer to:
 - [Testing Guide](./docs/testing.md)
 - [Usage Guide (English)](./docs/usage_en.md)
 - [Usage Guide (中文)](./docs/usage_zh.md)
+- [Usage Guide (日本語)](./docs/usage_ja.md)
