@@ -44,13 +44,25 @@ func Run(args []string) {
 	if err != nil {
 		log.Fatalf("simulation run failed: %v", err)
 	}
+	log.Printf("Simulation finished.")
 	log.Printf(
-		"Simulation finished. accepted_blocks=%d observed_blocks=%d mean_delay=%.2f orphan_rate=%.4f",
+		"  events: total=%d add-node=%d add-link=%d add-block=%d flow-block=%d simulation-end=%d",
+		stats.TotalEvents,
+		stats.AddNodeEvents,
+		stats.AddLinkEvents,
+		stats.AddBlockEvents,
+		stats.FlowBlockEvents,
+		stats.SimulationEndEvents,
+	)
+	log.Printf("  simulation_end_timestamp=%d", stats.SimulationEndTime)
+	log.Printf(
+		"  blocks: accepted=%d observed=%d orphan_blocks=%d orphan_rate=%.4f",
 		stats.AcceptedBlocks,
 		stats.ObservedBlocks,
-		stats.MeanPropagationDelay,
+		stats.OrphanBlocks,
 		stats.OrphanRate,
 	)
+	log.Printf("  mean_propagation_delay=%.2f", stats.MeanPropagationDelay)
 }
 
 func defaultBandwidths(regionCount int) ([]uint64, []uint64) {

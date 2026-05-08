@@ -1,0 +1,34 @@
+# Java SimBlock-like defaults.
+#
+# This file maps the Java version's core SimulationConfiguration values
+# onto the Go version's currently supported config fields. Network profiles,
+# bandwidth distributions, and CBR/churn constants are still handled in code
+# when java_compatible is true.
+
+simulation:
+  # Java: NUM_OF_NODES = 300
+  num_nodes: 300
+
+  # Java: INTERVAL = 1000 * 60 * 10
+  # Unit: millisecond
+  block_interval: 600000
+
+  # Java: BLOCK_SIZE = 535000
+  # Unit: byte
+  block_size: 535000
+
+  # Java-compatible mode stops by block height.
+  # Kept for completeness; ignored by the simulator loop in this mode.
+  end_time: 100000000
+
+  # Java: END_BLOCK_HEIGHT = 3
+  end_block_height: 3
+
+  # Enables Java-like region distribution, degree distribution, RNG,
+  # latency jitter, CBR/churn sampling, and height-based stopping.
+  java_compatible: true
+
+network:
+  # Uses the current Go latency matrix. This matches the Java LATENCY_2019
+  # shape and values used by the Go port.
+  latency_matrix_file: "./data/latency.txt"

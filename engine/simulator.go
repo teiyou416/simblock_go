@@ -33,6 +33,13 @@ type Stats struct {
 	MeanPropagationDelay float64 `json:"mean_propagation_delay"`
 	OrphanBlocks         int     `json:"orphan_blocks"`
 	OrphanRate           float64 `json:"orphan_rate"`
+	TotalEvents          int     `json:"total_events"`
+	AddNodeEvents        int     `json:"add_node_events"`
+	AddLinkEvents        int     `json:"add_link_events"`
+	AddBlockEvents       int     `json:"add_block_events"`
+	FlowBlockEvents      int     `json:"flow_block_events"`
+	SimulationEndEvents  int     `json:"simulation_end_events"`
+	SimulationEndTime    int64   `json:"simulation_end_time"`
 }
 
 type Simulator struct {
@@ -375,12 +382,38 @@ func (s *Simulator) collectStats() Stats {
 		orphanRate = float64(orphans) / float64(total)
 	}
 
+	eventCounts := make(map[string]int)
+	var simulationEndTime int64
+	for _, event := range s.events {
+		kind, _ := event["kind"].(string)
+		eventCounts[kind]++
+		if kind == "simulation-end" {
+			if content, ok := event["content"].(map[string]any); ok {
+				switch timestamp := content["timestamp"].(type) {
+				case core.SimTime:
+					simulationEndTime = int64(timestamp)
+				case int64:
+					simulationEndTime = timestamp
+				case int:
+					simulationEndTime = int64(timestamp)
+				}
+			}
+		}
+	}
+
 	return Stats{
 		AcceptedBlocks:       s.acceptedBlocks,
 		ObservedBlocks:       len(s.seenBlocks),
 		MeanPropagationDelay: mean,
 		OrphanBlocks:         orphans,
 		OrphanRate:           orphanRate,
+		TotalEvents:          len(s.events),
+		AddNodeEvents:        eventCounts["add-node"],
+		AddLinkEvents:        eventCounts["add-link"],
+		AddBlockEvents:       eventCounts["add-block"],
+		FlowBlockEvents:      eventCounts["flow-block"],
+		SimulationEndEvents:  eventCounts["simulation-end"],
+		SimulationEndTime:    simulationEndTime,
 	}
 }
 
