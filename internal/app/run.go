@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/teiyou416/simblock_go/config"
 	"github.com/teiyou416/simblock_go/core"
@@ -13,6 +14,7 @@ import (
 // Run boots the current SimBlock-Go application skeleton.
 func Run(args []string) {
 	fmt.Println("Starting SimBlock-Go...")
+	startedAt := time.Now()
 
 	// Step 1: load configuration.
 	config.InitConfig(args)
@@ -59,6 +61,7 @@ func Run(args []string) {
 		log.Fatalf("simulation run failed: %v", err)
 	}
 	log.Printf("Simulation finished.")
+	log.Printf("  wall_clock_duration=%s", time.Since(startedAt).Round(time.Millisecond))
 	log.Printf(
 		"  events: total=%d add-node=%d add-link=%d add-block=%d flow-block=%d simulation-end=%d",
 		stats.TotalEvents,
