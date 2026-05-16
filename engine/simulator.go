@@ -360,19 +360,19 @@ func (s *Simulator) collectStats() Stats {
 		mean = float64(sum) / float64(len(s.delays))
 	}
 
-	orphanSet := make(map[uint64]struct{})
-	for _, n := range s.nodes {
-		for _, b := range n.Orphans() {
-			orphanSet[b.ID()] = struct{}{}
+	mainChainSet := canonicalChainSet(s.bestTip())
+	mainChainBlocks := 0
+	for id := range mainChainSet {
+		if _, seen := s.seenBlocks[id]; seen {
+			mainChainBlocks++
 		}
 	}
 
-	mainChainBlocks := 0
-	if len(s.nodes) > 0 && s.nodes[0].Tip() != nil {
-		mainChainBlocks = int(s.nodes[0].Tip().Height() + 1)
+	total := len(s.seenBlocks)
+	orphans := total - mainChainBlocks
+	if orphans < 0 {
+		orphans = 0
 	}
-	orphans := len(orphanSet)
-	total := mainChainBlocks + orphans
 	orphanRate := 0.0
 	if total > 0 {
 		orphanRate = float64(orphans) / float64(total)
@@ -411,6 +411,41 @@ func (s *Simulator) collectStats() Stats {
 		SimulationEndEvents:  eventCounts["simulation-end"],
 		SimulationEndTime:    simulationEndTime,
 	}
+}
+
+func (s *Simulator) bestTip() *core.Block {
+	var best *core.Block
+	var bestWork uint64
+	for _, n := range s.nodes {
+		tip := n.Tip()
+		if tip == nil {
+			continue
+		}
+		work := chainWork(tip)
+		if best == nil ||
+			work > bestWork ||
+			(work == bestWork && tip.Height() > best.Height()) ||
+			(work == bestWork && tip.Height() == best.Height() && tip.ID() < best.ID()) {
+			best = tip
+			bestWork = work
+		}
+	}
+	return best
+}
+
+func chainWork(block *core.Block) uint64 {
+	if data, ok := consensus.PoWDataFromBlock(block); ok {
+		return data.TotalDifficulty
+	}
+	return block.Height()
+}
+
+func canonicalChainSet(tip *core.Block) map[uint64]struct{} {
+	chain := make(map[uint64]struct{})
+	for b := tip; b != nil; b = b.Parent() {
+		chain[b.ID()] = struct{}{}
+	}
+	return chain
 }
 
 func (s *Simulator) writeOutputs(stats Stats) error {
