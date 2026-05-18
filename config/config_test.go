@@ -13,6 +13,7 @@ func TestLoadConfigAppliesCLIOverrides(t *testing.T) {
   num_nodes: 300
   block_interval: 600000
   block_size: 535000
+  fork_choice: heaviest
   end_time: 100000000
   end_block_height: 3
   java_compatible: true
@@ -34,6 +35,7 @@ network:
 		"--num-nodes", "12",
 		"--block-interval", "1234",
 		"--block-size", "4321",
+		"--fork-choice", "ghost",
 		"--end-time", "9999",
 		"--end-block-height", "7",
 		"--java-compatible", "false",
@@ -52,6 +54,9 @@ network:
 	}
 	if cfg.Simulation.BlockSize != 4321 {
 		t.Fatalf("block size = %d, want %d", cfg.Simulation.BlockSize, 4321)
+	}
+	if cfg.Simulation.ForkChoice != "ghost" {
+		t.Fatalf("fork choice = %q, want %q", cfg.Simulation.ForkChoice, "ghost")
 	}
 	if cfg.Simulation.EndTime != 9999 {
 		t.Fatalf("end time = %d, want %d", cfg.Simulation.EndTime, 9999)

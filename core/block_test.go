@@ -44,3 +44,29 @@ func TestCoreBlockParentIDAndChainRelation(t *testing.T) {
 		t.Fatal("BlockWithHeight(0) should return genesis")
 	}
 }
+
+func TestCoreBlockUnclesAreStoredAndCopied(t *testing.T) {
+	nextCoreBlockID = 0
+	g := GenesisBlock(1, nil)
+	a := NewBlock(g, 2, 10, nil)
+	u1 := NewBlock(g, 3, 11, nil)
+	u2 := NewBlock(g, 4, 12, nil)
+	b := NewBlockWithUncles(a, 5, 20, nil, []*Block{u1, u2})
+
+	uncles := b.Uncles()
+	if got, want := len(uncles), 2; got != want {
+		t.Fatalf("uncles len: got=%d want=%d", got, want)
+	}
+	uncles[0] = nil
+	if b.Uncles()[0] == nil {
+		t.Fatal("Uncles() should return a defensive copy")
+	}
+
+	ids := b.UncleIDs()
+	if got, want := len(ids), 2; got != want {
+		t.Fatalf("uncle ids len: got=%d want=%d", got, want)
+	}
+	if ids[0] != u1.ID() || ids[1] != u2.ID() {
+		t.Fatalf("unexpected uncle ids: got=%v want=[%d %d]", ids, u1.ID(), u2.ID())
+	}
+}

@@ -2,6 +2,8 @@ package node
 
 import (
 	"math/rand"
+	"sort"
+	"strings"
 
 	"github.com/teiyou416/simblock_go/core"
 	"github.com/teiyou416/simblock_go/network"
@@ -13,6 +15,15 @@ const (
 	defaultProcessingTime core.SimTime = 2
 	defaultBlockSize      uint64       = 535000
 	defaultCompactSize    uint64       = 18 * 1000
+	maxUnclesPerBlock     int          = 2
+	maxUncleGenerations   uint64       = 6
+)
+
+type ForkChoice string
+
+const (
+	ForkChoiceHeaviest ForkChoice = "heaviest"
+	ForkChoiceGHOST    ForkChoice = "ghost"
 )
 
 type sizeBucket struct {
@@ -50,6 +61,10 @@ type blockBuilder interface {
 	BuildChildBlock(parent *core.Block, minterID int, now core.SimTime) *core.Block
 }
 
+type blockBuilderWithUncles interface {
+	BuildChildBlockWithUncles(parent *core.Block, minterID int, now core.SimTime, uncles []*core.Block) *core.Block
+}
+
 type randomSource interface {
 	Float64() float64
 	Intn(n int) int
@@ -71,7 +86,8 @@ type Node struct {
 	timer   scheduler
 	network *network.Model
 
-	consensus consensus.Algorithm
+	consensus  consensus.Algorithm
+	forkChoice ForkChoice
 
 	useCompactBlockRelay bool
 	churnNode            bool
@@ -86,6 +102,8 @@ type Node struct {
 	compactSize    uint64
 	cbrFailureRate float64
 	rng            randomSource
+	knownBlocks    map[uint64]*core.Block
+	includedUncles map[uint64]struct{}
 
 	onBlockAccepted func(self *Node, block *core.Block, timestamp core.SimTime)
 	onFlowBlock     func(from, to *Node, block *core.Block, transmission, reception core.SimTime)
@@ -110,6 +128,9 @@ func NewWithHashPower(id, region int, hashPower uint64) *Node {
 		compactSize:       defaultCompactSize,
 		numConnections:    8,
 		rng:               rand.New(rand.NewSource(1)),
+		forkChoice:        ForkChoiceHeaviest,
+		knownBlocks:       make(map[uint64]*core.Block),
+		includedUncles:    make(map[uint64]struct{}),
 	}
 }
 
@@ -120,6 +141,19 @@ func (n *Node) BindEnvironment(timer scheduler, net *network.Model) {
 
 func (n *Node) SetConsensus(algo consensus.Algorithm) {
 	n.consensus = algo
+}
+
+func (n *Node) SetForkChoice(choice string) {
+	switch ForkChoice(strings.ToLower(choice)) {
+	case ForkChoiceGHOST:
+		n.forkChoice = ForkChoiceGHOST
+	default:
+		n.forkChoice = ForkChoiceHeaviest
+	}
+}
+
+func (n *Node) ForkChoice() string {
+	return string(n.forkChoice)
 }
 
 func (n *Node) SetCompactBlockRelay(enabled bool) {
@@ -298,12 +332,20 @@ func (n *Node) ReceiveBlock(b *core.Block) bool {
 	}
 
 	if n.consensus != nil {
-		if !n.consensus.IsReceivedBlockValid(b, n.tip) {
+		if !n.isBlockValidAgainstForkChoice(b) {
 			if _, seen := n.orphans[b.ID()]; !seen && (n.tip == nil || !b.IsOnSameChainAs(n.tip)) {
 				n.addOrphans(b, n.tip)
 			}
 			return false
 		}
+		if !n.isValidUncleSet(b) {
+			return false
+		}
+		n.rememberKnownChain(b)
+	}
+
+	if n.forkChoice == ForkChoiceGHOST {
+		return n.receiveBlockByGHOST()
 	}
 
 	if n.tip != nil && !n.tip.IsOnSameChainAs(b) {
@@ -312,9 +354,283 @@ func (n *Node) ReceiveBlock(b *core.Block) bool {
 
 	n.tip = b
 	n.recordBlockAccepted(b)
+	n.rebuildIncludedUncles()
 	n.startMinting()
 	n.SendInv(b)
 	return true
+}
+
+func (n *Node) isBlockValidAgainstForkChoice(b *core.Block) bool {
+	if n.consensus == nil {
+		return false
+	}
+	switch n.forkChoice {
+	case ForkChoiceGHOST:
+		return n.consensus.IsReceivedBlockValid(b, nil)
+	default:
+		return n.consensus.IsReceivedBlockValid(b, n.tip)
+	}
+}
+
+func (n *Node) receiveBlockByGHOST() bool {
+	nextTip := n.ghostTip()
+	if nextTip == nil {
+		return false
+	}
+	if n.tip != nil && n.tip.ID() == nextTip.ID() {
+		return false
+	}
+	if n.tip != nil && !n.tip.IsOnSameChainAs(nextTip) {
+		n.addOrphans(n.tip, nextTip)
+	}
+	n.tip = nextTip
+	n.recordBlockAccepted(nextTip)
+	n.rebuildIncludedUncles()
+	n.startMinting()
+	n.SendInv(nextTip)
+	return true
+}
+
+func (n *Node) rememberKnownChain(b *core.Block) {
+	for cur := b; cur != nil; cur = cur.Parent() {
+		n.knownBlocks[cur.ID()] = cur
+	}
+	for _, u := range b.Uncles() {
+		for cur := u; cur != nil; cur = cur.Parent() {
+			n.knownBlocks[cur.ID()] = cur
+		}
+	}
+}
+
+func (n *Node) ghostTip() *core.Block {
+	if len(n.knownBlocks) == 0 {
+		return nil
+	}
+	children := make(map[uint64][]uint64, len(n.knownBlocks))
+	roots := make([]uint64, 0, 1)
+	for id, b := range n.knownBlocks {
+		parentID, hasParent := b.ParentID()
+		if !hasParent {
+			roots = append(roots, id)
+			continue
+		}
+		if _, exists := n.knownBlocks[parentID]; !exists {
+			roots = append(roots, id)
+			continue
+		}
+		children[parentID] = append(children[parentID], id)
+	}
+
+	weightMemo := make(map[uint64]uint64, len(n.knownBlocks))
+	var subtreeWeight func(id uint64) uint64
+	subtreeWeight = func(id uint64) uint64 {
+		if w, ok := weightMemo[id]; ok {
+			return w
+		}
+		total := nodeWeight(n.knownBlocks[id])
+		for _, childID := range children[id] {
+			total += subtreeWeight(childID)
+		}
+		weightMemo[id] = total
+		return total
+	}
+
+	best := roots[0]
+	for _, id := range roots[1:] {
+		best = n.pickHeavierSubtree(best, id, subtreeWeight)
+	}
+
+	for {
+		kids := children[best]
+		if len(kids) == 0 {
+			break
+		}
+		bestChild := kids[0]
+		for _, candidate := range kids[1:] {
+			bestChild = n.pickHeavierSubtree(bestChild, candidate, subtreeWeight)
+		}
+		best = bestChild
+	}
+
+	return n.knownBlocks[best]
+}
+
+func (n *Node) pickHeavierSubtree(left, right uint64, subtreeWeight func(id uint64) uint64) uint64 {
+	lw := subtreeWeight(left)
+	rw := subtreeWeight(right)
+	if rw > lw {
+		return right
+	}
+	if lw > rw {
+		return left
+	}
+	lWork := blockWork(n.knownBlocks[left])
+	rWork := blockWork(n.knownBlocks[right])
+	if rWork > lWork {
+		return right
+	}
+	if lWork > rWork {
+		return left
+	}
+	if right < left {
+		return right
+	}
+	return left
+}
+
+func blockWork(b *core.Block) uint64 {
+	if data, ok := consensus.PoWDataFromBlock(b); ok {
+		return data.TotalDifficulty
+	}
+	return b.Height()
+}
+
+func canonicalChainSet(tip *core.Block) map[uint64]struct{} {
+	out := make(map[uint64]struct{})
+	for cur := tip; cur != nil; cur = cur.Parent() {
+		out[cur.ID()] = struct{}{}
+	}
+	return out
+}
+
+func blockDifficulty(b *core.Block) uint64 {
+	if data, ok := consensus.PoWDataFromBlock(b); ok {
+		return data.Difficulty
+	}
+	if b == nil {
+		return 0
+	}
+	if b.Height() == 0 {
+		return 0
+	}
+	return 1
+}
+
+func nodeWeight(b *core.Block) uint64 {
+	if b == nil {
+		return 0
+	}
+	weight := blockDifficulty(b)
+	for _, u := range b.Uncles() {
+		weight += blockDifficulty(u)
+	}
+	return weight
+}
+
+func (n *Node) isValidUncleSet(b *core.Block) bool {
+	if n.forkChoice != ForkChoiceGHOST {
+		return true
+	}
+	uncles := b.Uncles()
+	if len(uncles) > maxUnclesPerBlock {
+		return false
+	}
+	if len(uncles) == 0 {
+		return true
+	}
+	parent := b.Parent()
+	if parent == nil {
+		return false
+	}
+	parentChain := canonicalChainSet(parent)
+	seen := make(map[uint64]struct{}, len(uncles))
+	for _, u := range uncles {
+		if u == nil {
+			return false
+		}
+		if u.ID() == parent.ID() {
+			return false
+		}
+		if _, dup := seen[u.ID()]; dup {
+			return false
+		}
+		seen[u.ID()] = struct{}{}
+		if _, already := n.includedUncles[u.ID()]; already {
+			return false
+		}
+		if _, onParentChain := parentChain[u.ID()]; onParentChain {
+			return false
+		}
+		parentID, hasParent := u.ParentID()
+		if !hasParent {
+			return false
+		}
+		if _, parentOnChain := parentChain[parentID]; !parentOnChain {
+			return false
+		}
+		if b.Height() <= u.Height() {
+			return false
+		}
+		if b.Height()-u.Height() > maxUncleGenerations {
+			return false
+		}
+	}
+	return true
+}
+
+func (n *Node) rebuildIncludedUncles() {
+	next := make(map[uint64]struct{})
+	for cur := n.tip; cur != nil; cur = cur.Parent() {
+		for _, u := range cur.Uncles() {
+			if u == nil {
+				continue
+			}
+			next[u.ID()] = struct{}{}
+		}
+	}
+	n.includedUncles = next
+}
+
+func (n *Node) selectUnclesForChild(parent *core.Block) []*core.Block {
+	if n.forkChoice != ForkChoiceGHOST || parent == nil {
+		return nil
+	}
+	parentChain := canonicalChainSet(parent)
+	candidates := make([]*core.Block, 0, len(n.knownBlocks))
+	newHeight := parent.Height() + 1
+	for _, b := range n.knownBlocks {
+		if b == nil {
+			continue
+		}
+		if b.ID() == parent.ID() {
+			continue
+		}
+		if _, onParentChain := parentChain[b.ID()]; onParentChain {
+			continue
+		}
+		if _, already := n.includedUncles[b.ID()]; already {
+			continue
+		}
+		parentID, hasParent := b.ParentID()
+		if !hasParent {
+			continue
+		}
+		if _, parentOnChain := parentChain[parentID]; !parentOnChain {
+			continue
+		}
+		if newHeight <= b.Height() {
+			continue
+		}
+		if newHeight-b.Height() > maxUncleGenerations {
+			continue
+		}
+		candidates = append(candidates, b)
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		wi := blockDifficulty(candidates[i])
+		wj := blockDifficulty(candidates[j])
+		if wi != wj {
+			return wi > wj
+		}
+		if candidates[i].Height() != candidates[j].Height() {
+			return candidates[i].Height() > candidates[j].Height()
+		}
+		return candidates[i].ID() < candidates[j].ID()
+	})
+	if len(candidates) > maxUnclesPerBlock {
+		candidates = candidates[:maxUnclesPerBlock]
+	}
+	return candidates
 }
 
 func (n *Node) addOrphans(orphanBlock, validBlock *core.Block) {
@@ -350,11 +666,16 @@ func (n *Node) startMinting() {
 	}
 
 	mineTask := tasks.NewMiningTaskWithParent(intervalTask.Interval(), n.tip.Height(), func() {
-		builder, ok := n.consensus.(blockBuilder)
-		if !ok {
-			return
+		var block *core.Block
+		if builder, ok := n.consensus.(blockBuilderWithUncles); ok {
+			block = builder.BuildChildBlockWithUncles(n.tip, n.id, n.timer.CurrentTime(), n.selectUnclesForChild(n.tip))
+		} else {
+			builder, ok := n.consensus.(blockBuilder)
+			if !ok {
+				return
+			}
+			block = builder.BuildChildBlock(n.tip, n.id, n.timer.CurrentTime())
 		}
-		block := builder.BuildChildBlock(n.tip, n.id, n.timer.CurrentTime())
 		if block != nil {
 			n.ReceiveBlock(block)
 		}
@@ -409,7 +730,7 @@ func (n *Node) ReceiveMessage(message tasks.MessageTask) {
 		}
 		if n.tip != nil {
 			if n.consensus != nil {
-				if !n.consensus.IsReceivedBlockValid(block, n.tip) && block.IsOnSameChainAs(n.tip) {
+				if !n.isBlockValidAgainstForkChoice(block) && block.IsOnSameChainAs(n.tip) {
 					return
 				}
 			} else {

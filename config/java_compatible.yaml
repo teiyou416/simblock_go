@@ -17,6 +17,9 @@ simulation:
   # Unit: byte
   block_size: 535000
 
+  # Fork-choice rule: "heaviest" (default) or "ghost".
+  fork_choice: "heaviest"
+
   # Java-compatible mode stops by block height.
   # Kept for completeness; ignored by the simulator loop in this mode.
   end_time: 100000000

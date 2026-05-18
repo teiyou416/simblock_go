@@ -2,6 +2,7 @@ simulation:
   num_nodes: 300
   block_interval: 600000 # 10分钟，单位毫秒
   block_size: 535000 # 约 0.5MB
+  fork_choice: "heaviest" # heaviest 或 ghost
   end_time: 100000000 # 普通 Go 模式使用
   end_block_height: 300 # Java 兼容模式使用
   java_compatible: false

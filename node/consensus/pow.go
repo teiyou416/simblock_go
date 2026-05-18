@@ -139,6 +139,10 @@ func (p *PoW) GenesisBlock(minterID int) *core.Block {
 
 // BuildChildBlock creates a PoW block extending parent at time now.
 func (p *PoW) BuildChildBlock(parent *core.Block, minterID int, now core.SimTime) *core.Block {
+	return p.BuildChildBlockWithUncles(parent, minterID, now, nil)
+}
+
+func (p *PoW) BuildChildBlockWithUncles(parent *core.Block, minterID int, now core.SimTime, uncles []*core.Block) *core.Block {
 	if parent == nil {
 		return p.GenesisBlock(minterID)
 	}
@@ -157,7 +161,7 @@ func (p *PoW) BuildChildBlock(parent *core.Block, minterID int, now core.SimTime
 		TotalDifficulty: total,
 		NextDifficulty:  next,
 	}
-	return core.NewBlock(parent, minterID, now, data)
+	return core.NewBlockWithUncles(parent, minterID, now, data, uncles)
 }
 
 func (p *PoW) nextDifficulty(parent *core.Block, current uint64) uint64 {

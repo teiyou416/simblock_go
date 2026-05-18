@@ -10,21 +10,29 @@ type Block struct {
 	id            uint64
 	height        uint64
 	parent        *Block
+	uncles        []*Block
 	minterID      int
 	time          SimTime
 	consensusData any
 }
 
 func NewBlock(parent *Block, minterID int, time SimTime, consensusData any) *Block {
+	return NewBlockWithUncles(parent, minterID, time, consensusData, nil)
+}
+
+func NewBlockWithUncles(parent *Block, minterID int, time SimTime, consensusData any, uncles []*Block) *Block {
 	height := uint64(0)
 	if parent != nil {
 		height = parent.height + 1
 	}
+	uncleCopy := make([]*Block, len(uncles))
+	copy(uncleCopy, uncles)
 
 	b := &Block{
 		id:            nextCoreBlockID,
 		height:        height,
 		parent:        parent,
+		uncles:        uncleCopy,
 		minterID:      minterID,
 		time:          time,
 		consensusData: consensusData,
@@ -47,6 +55,29 @@ func (b *Block) Height() uint64 {
 
 func (b *Block) Parent() *Block {
 	return b.parent
+}
+
+func (b *Block) Uncles() []*Block {
+	if b == nil || len(b.uncles) == 0 {
+		return nil
+	}
+	out := make([]*Block, len(b.uncles))
+	copy(out, b.uncles)
+	return out
+}
+
+func (b *Block) UncleIDs() []uint64 {
+	if b == nil || len(b.uncles) == 0 {
+		return nil
+	}
+	out := make([]uint64, 0, len(b.uncles))
+	for _, u := range b.uncles {
+		if u == nil {
+			continue
+		}
+		out = append(out, u.id)
+	}
+	return out
 }
 
 func (b *Block) ParentID() (uint64, bool) {

@@ -51,6 +51,7 @@ func Run(args []string) {
 		EndTime:            core.SimTime(config.GlobalConfig.Simulation.EndTime),
 		EndBlockHeight:     config.GlobalConfig.Simulation.EndBlockHeight,
 		BlockSize:          uint64(config.GlobalConfig.Simulation.BlockSize),
+		ForkChoice:         config.GlobalConfig.Simulation.ForkChoice,
 		OutputDir:          runOutputDir,
 		RandomSeed:         10,
 		ConnectionsPerNode: 8,
@@ -76,10 +77,12 @@ func Run(args []string) {
 	)
 	log.Printf("  simulation_end_timestamp=%d", stats.SimulationEndTime)
 	log.Printf(
-		"  blocks: accepted=%d observed=%d orphan_blocks=%d orphan_rate=%.4f",
+		"  blocks: accepted=%d observed=%d main_chain=%d uncles=%d true_orphans=%d orphan_rate=%.4f",
 		stats.AcceptedBlocks,
 		stats.ObservedBlocks,
-		stats.OrphanBlocks,
+		stats.MainChainBlocks,
+		stats.UncleBlocks,
+		stats.TrueOrphanBlocks,
 		stats.OrphanRate,
 	)
 	log.Printf("  mean_propagation_delay=%.2f", stats.MeanPropagationDelay)

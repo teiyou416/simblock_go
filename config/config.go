@@ -12,12 +12,13 @@ import (
 
 type Config struct {
 	Simulation struct {
-		NumNodes       int   `mapstructure:"num_nodes"`
-		BlockInterval  int64 `mapstructure:"block_interval"`
-		BlockSize      int   `mapstructure:"block_size"`
-		EndTime        int64 `mapstructure:"end_time"`
-		EndBlockHeight int   `mapstructure:"end_block_height"`
-		JavaCompatible bool  `mapstructure:"java_compatible"`
+		NumNodes       int    `mapstructure:"num_nodes"`
+		BlockInterval  int64  `mapstructure:"block_interval"`
+		BlockSize      int    `mapstructure:"block_size"`
+		ForkChoice     string `mapstructure:"fork_choice"`
+		EndTime        int64  `mapstructure:"end_time"`
+		EndBlockHeight int    `mapstructure:"end_block_height"`
+		JavaCompatible bool   `mapstructure:"java_compatible"`
 	} `mapstructure:"simulation"`
 	Network struct {
 		LatencyMatrixFile  string    `mapstructure:"latency_matrix_file"`
@@ -49,6 +50,7 @@ func LoadConfig(args []string) (Config, error) {
 	flagSet.Int("num-nodes", 0, "override simulation.num_nodes")
 	flagSet.Int64("block-interval", 0, "override simulation.block_interval")
 	flagSet.Int("block-size", 0, "override simulation.block_size")
+	flagSet.String("fork-choice", "", "override simulation.fork_choice (heaviest|ghost)")
 	flagSet.Int64("end-time", 0, "override simulation.end_time")
 	flagSet.Int("end-block-height", 0, "override simulation.end_block_height")
 	flagSet.String("java-compatible", "", "override simulation.java_compatible")
@@ -74,6 +76,9 @@ func LoadConfig(args []string) (Config, error) {
 		return Config{}, err
 	}
 	if err := applyIntOverride(v, flagSet.Lookup("block-size"), "simulation.block_size"); err != nil {
+		return Config{}, err
+	}
+	if err := applyStringOverride(v, flagSet.Lookup("fork-choice"), "simulation.fork_choice"); err != nil {
 		return Config{}, err
 	}
 	if err := applyInt64Override(v, flagSet.Lookup("end-time"), "simulation.end_time"); err != nil {

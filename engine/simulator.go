@@ -22,6 +22,7 @@ type SimulatorConfig struct {
 	EndTime            core.SimTime
 	EndBlockHeight     int
 	BlockSize          uint64
+	ForkChoice         string
 	OutputDir          string
 	RandomSeed         int64
 	ConnectionsPerNode int
@@ -33,6 +34,9 @@ type Stats struct {
 	AcceptedBlocks       int     `json:"accepted_blocks"`
 	ObservedBlocks       int     `json:"observed_blocks"`
 	MeanPropagationDelay float64 `json:"mean_propagation_delay"`
+	MainChainBlocks      int     `json:"main_chain_blocks"`
+	UncleBlocks          int     `json:"uncle_blocks"`
+	TrueOrphanBlocks     int     `json:"true_orphan_blocks"`
 	OrphanBlocks         int     `json:"orphan_blocks"`
 	OrphanRate           float64 `json:"orphan_rate"`
 	TotalEvents          int     `json:"total_events"`
@@ -109,6 +113,9 @@ func NewSimulator(cfg SimulatorConfig, timer *Timer, net *network.Model) *Simula
 	if cfg.NetworkProfile.Name == "" {
 		cfg.NetworkProfile = network.Bitcoin2019Profile
 	}
+	if cfg.ForkChoice == "" {
+		cfg.ForkChoice = string(node.ForkChoiceHeaviest)
+	}
 	return &Simulator{
 		cfg:         cfg,
 		timer:       timer,
@@ -152,6 +159,7 @@ func (s *Simulator) setupSimple(regionCount int) error {
 		n.SetCompactBlockRelay(true)
 		n.SetCompactFailureRate(0.13)
 		n.SetBlockSize(s.cfg.BlockSize)
+		n.SetForkChoice(s.cfg.ForkChoice)
 		n.SetBlockAcceptedObserver(s.onBlockAccepted)
 		n.SetFlowObserver(s.onFlowBlock)
 		n.SetRNG(s.rng)
@@ -191,6 +199,7 @@ func (s *Simulator) setupJavaCompatible(regionCount int) error {
 		n.SetCompactBlockRelay(useCBR)
 		n.SetChurnNode(isChurn)
 		n.SetBlockSize(s.cfg.BlockSize)
+		n.SetForkChoice(s.cfg.ForkChoice)
 		if isChurn {
 			n.SetCompactFailureRate(0.27)
 		} else {
@@ -385,22 +394,25 @@ func (s *Simulator) collectStats() Stats {
 		mean = float64(sum) / float64(len(s.delays))
 	}
 
-	mainChainSet := canonicalChainSet(s.bestTip())
+	bestTip := s.bestTip()
+	mainChainSet := canonicalChainSet(bestTip)
 	mainChainBlocks := 0
 	for id := range mainChainSet {
 		if _, seen := s.seenBlocks[id]; seen {
 			mainChainBlocks++
 		}
 	}
+	includedUncles := includedUncleSet(bestTip)
+	uncleBlocks := len(includedUncles)
 
 	total := len(s.seenBlocks)
-	orphans := total - mainChainBlocks
-	if orphans < 0 {
-		orphans = 0
+	trueOrphans := total - mainChainBlocks - uncleBlocks
+	if trueOrphans < 0 {
+		trueOrphans = 0
 	}
 	orphanRate := 0.0
 	if total > 0 {
-		orphanRate = float64(orphans) / float64(total)
+		orphanRate = float64(trueOrphans) / float64(total)
 	}
 
 	eventCounts := make(map[string]int)
@@ -426,7 +438,10 @@ func (s *Simulator) collectStats() Stats {
 		AcceptedBlocks:       s.acceptedBlocks,
 		ObservedBlocks:       len(s.seenBlocks),
 		MeanPropagationDelay: mean,
-		OrphanBlocks:         orphans,
+		MainChainBlocks:      mainChainBlocks,
+		UncleBlocks:          uncleBlocks,
+		TrueOrphanBlocks:     trueOrphans,
+		OrphanBlocks:         trueOrphans,
 		OrphanRate:           orphanRate,
 		TotalEvents:          len(s.events),
 		AddNodeEvents:        eventCounts["add-node"],
@@ -439,6 +454,9 @@ func (s *Simulator) collectStats() Stats {
 }
 
 func (s *Simulator) bestTip() *core.Block {
+	if strings.EqualFold(s.cfg.ForkChoice, string(node.ForkChoiceGHOST)) {
+		return ghostTipFromKnownBlocks(s.seenBlocks)
+	}
 	var best *core.Block
 	var bestWork uint64
 	for _, n := range s.nodes {
@@ -459,10 +477,14 @@ func (s *Simulator) bestTip() *core.Block {
 }
 
 func chainWork(block *core.Block) uint64 {
-	if data, ok := consensus.PoWDataFromBlock(block); ok {
-		return data.TotalDifficulty
+	work := uint64(0)
+	for cur := block; cur != nil; cur = cur.Parent() {
+		work += blockDifficulty(cur)
+		for _, u := range cur.Uncles() {
+			work += blockDifficulty(u)
+		}
 	}
-	return block.Height()
+	return work
 }
 
 func canonicalChainSet(tip *core.Block) map[uint64]struct{} {
@@ -471,6 +493,109 @@ func canonicalChainSet(tip *core.Block) map[uint64]struct{} {
 		chain[b.ID()] = struct{}{}
 	}
 	return chain
+}
+
+func blockDifficulty(b *core.Block) uint64 {
+	if data, ok := consensus.PoWDataFromBlock(b); ok {
+		return data.Difficulty
+	}
+	if b == nil || b.Height() == 0 {
+		return 0
+	}
+	return 1
+}
+
+func includedUncleSet(tip *core.Block) map[uint64]struct{} {
+	out := make(map[uint64]struct{})
+	for cur := tip; cur != nil; cur = cur.Parent() {
+		for _, u := range cur.Uncles() {
+			if u == nil {
+				continue
+			}
+			out[u.ID()] = struct{}{}
+		}
+	}
+	return out
+}
+
+func ghostTipFromKnownBlocks(known map[uint64]*core.Block) *core.Block {
+	if len(known) == 0 {
+		return nil
+	}
+	children := make(map[uint64][]uint64, len(known))
+	roots := make([]uint64, 0, 1)
+	for id, b := range known {
+		parentID, hasParent := b.ParentID()
+		if !hasParent {
+			roots = append(roots, id)
+			continue
+		}
+		if _, exists := known[parentID]; !exists {
+			roots = append(roots, id)
+			continue
+		}
+		children[parentID] = append(children[parentID], id)
+	}
+	for id := range children {
+		sort.Slice(children[id], func(i, j int) bool { return children[id][i] < children[id][j] })
+	}
+
+	weightMemo := make(map[uint64]uint64, len(known))
+	var subtreeWeight func(id uint64) uint64
+	subtreeWeight = func(id uint64) uint64 {
+		if w, ok := weightMemo[id]; ok {
+			return w
+		}
+		total := blockDifficulty(known[id])
+		for _, u := range known[id].Uncles() {
+			total += blockDifficulty(u)
+		}
+		for _, childID := range children[id] {
+			total += subtreeWeight(childID)
+		}
+		weightMemo[id] = total
+		return total
+	}
+
+	best := roots[0]
+	for _, id := range roots[1:] {
+		best = pickHeavierBySubtree(known, best, id, subtreeWeight)
+	}
+	for {
+		kids := children[best]
+		if len(kids) == 0 {
+			break
+		}
+		next := kids[0]
+		for _, c := range kids[1:] {
+			next = pickHeavierBySubtree(known, next, c, subtreeWeight)
+		}
+		best = next
+	}
+	return known[best]
+}
+
+func pickHeavierBySubtree(known map[uint64]*core.Block, left, right uint64, subtreeWeight func(uint64) uint64) uint64 {
+	lw := subtreeWeight(left)
+	rw := subtreeWeight(right)
+	if rw > lw {
+		return right
+	}
+	if lw > rw {
+		return left
+	}
+	lWork := chainWork(known[left])
+	rWork := chainWork(known[right])
+	if rWork > lWork {
+		return right
+	}
+	if lWork > rWork {
+		return left
+	}
+	if right < left {
+		return right
+	}
+	return left
 }
 
 func (s *Simulator) writeOutputs(stats Stats) error {
@@ -598,6 +723,9 @@ func buildMetricsText(stats Stats) string {
 	fmt.Fprintf(&b, "accepted_blocks: %d\n", stats.AcceptedBlocks)
 	fmt.Fprintf(&b, "observed_blocks: %d\n", stats.ObservedBlocks)
 	fmt.Fprintf(&b, "mean_propagation_delay: %.6f\n", stats.MeanPropagationDelay)
+	fmt.Fprintf(&b, "main_chain_blocks: %d\n", stats.MainChainBlocks)
+	fmt.Fprintf(&b, "uncle_blocks: %d\n", stats.UncleBlocks)
+	fmt.Fprintf(&b, "true_orphan_blocks: %d\n", stats.TrueOrphanBlocks)
 	fmt.Fprintf(&b, "orphan_blocks: %d\n", stats.OrphanBlocks)
 	fmt.Fprintf(&b, "orphan_rate: %.6f\n", stats.OrphanRate)
 	fmt.Fprintf(&b, "total_events: %d\n", stats.TotalEvents)
