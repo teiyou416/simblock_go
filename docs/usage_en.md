@@ -31,6 +31,7 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 ```
 
 Default simulation outputs are written to `output/`.
+By default `output_mode=core`, only `metrics.txt` is saved (smallest footprint).
 
 ## 3. Command-Line Arguments
 
@@ -45,6 +46,7 @@ Supported flags:
 - `--end-time`: override `simulation.end_time`
 - `--end-block-height`: override `simulation.end_block_height`
 - `--java-compatible`: override `simulation.java_compatible`
+- `--output-mode`: override `simulation.output_mode` (`core` or `full`)
 - `--network-profile`: override `network.profile`
 - `--latency-matrix-file`: override `network.latency_matrix_file`
 
@@ -62,6 +64,7 @@ Typical fields:
 - `simulation.end_time`: stop time for normal Go mode
 - `simulation.end_block_height`: stop height for Java-compatible mode
 - `simulation.java_compatible`: enable Java SimBlock-compatible behavior
+- `simulation.output_mode`: output mode; `core` keeps only key metrics, `full` writes full debug artifacts
 - `network.profile`: built-in network profile name, currently `bitcoin_2019`
 - `network.latency_matrix_file`: latency matrix file path
 - `network.upload_bandwidth`: per-region upload bandwidth in bit/s
@@ -89,8 +92,9 @@ Or use the helper script:
 
 Main output artifacts:
 
-- `output/output.json`
-- `output/static.json`
-- `output/metrics.json`
+- `output/<run_id>/metrics.txt` (default, `output_mode=core`)
+- `output/<run_id>/output.txt` (only in `output_mode=full`)
+- `output/<run_id>/static.txt` (only in `output_mode=full`)
+- `output/<run_id>/chain_tree.txt` (only in `output_mode=full`)
 
 These files are generated at runtime and are not tracked by default.

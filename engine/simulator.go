@@ -24,11 +24,17 @@ type SimulatorConfig struct {
 	BlockSize          uint64
 	ForkChoice         string
 	OutputDir          string
+	OutputMode         string
 	RandomSeed         int64
 	ConnectionsPerNode int
 	JavaCompatible     bool
 	NetworkProfile     network.Profile
 }
+
+const (
+	OutputModeCore = "core"
+	OutputModeFull = "full"
+)
 
 type Stats struct {
 	AcceptedBlocks       int     `json:"accepted_blocks"`
@@ -97,6 +103,9 @@ func NewSimulator(cfg SimulatorConfig, timer *Timer, net *network.Model) *Simula
 	}
 	if cfg.OutputDir == "" {
 		cfg.OutputDir = "output"
+	}
+	if cfg.OutputMode == "" {
+		cfg.OutputMode = OutputModeCore
 	}
 	if cfg.RandomSeed == 0 {
 		cfg.RandomSeed = 10
@@ -603,27 +612,33 @@ func (s *Simulator) writeOutputs(stats Stats) error {
 		return err
 	}
 
-	outputPath := filepath.Join(s.cfg.OutputDir, "output.txt")
-	if err := writeTextFile(outputPath, buildEventsText(s.events)); err != nil {
-		return err
-	}
-
-	staticPath := filepath.Join(s.cfg.OutputDir, "static.txt")
-	if err := writeTextFile(staticPath, buildStaticText()); err != nil {
-		return err
-	}
-
 	metricsPath := filepath.Join(s.cfg.OutputDir, "metrics.txt")
 	if err := writeTextFile(metricsPath, buildMetricsText(stats)); err != nil {
 		return err
 	}
 
-	chainTreeTextPath := filepath.Join(s.cfg.OutputDir, "chain_tree.txt")
-	if err := writeTextFile(chainTreeTextPath, buildChainTreeText(s.buildChainTreeSnapshot())); err != nil {
-		return err
-	}
+	switch s.cfg.OutputMode {
+	case OutputModeCore, "":
+		return nil
+	case OutputModeFull:
+		outputPath := filepath.Join(s.cfg.OutputDir, "output.txt")
+		if err := writeTextFile(outputPath, buildEventsText(s.events)); err != nil {
+			return err
+		}
 
-	return nil
+		staticPath := filepath.Join(s.cfg.OutputDir, "static.txt")
+		if err := writeTextFile(staticPath, buildStaticText()); err != nil {
+			return err
+		}
+
+		chainTreeTextPath := filepath.Join(s.cfg.OutputDir, "chain_tree.txt")
+		if err := writeTextFile(chainTreeTextPath, buildChainTreeText(s.buildChainTreeSnapshot())); err != nil {
+			return err
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown output mode %q: expected %q or %q", s.cfg.OutputMode, OutputModeCore, OutputModeFull)
+	}
 }
 
 func (s *Simulator) buildChainTreeSnapshot() chainTreeSnapshot {
@@ -719,22 +734,36 @@ func buildStaticText() string {
 
 func buildMetricsText(stats Stats) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "generated_at: %s\n", time.Now().UTC().Format(time.RFC3339))
-	fmt.Fprintf(&b, "accepted_blocks: %d\n", stats.AcceptedBlocks)
-	fmt.Fprintf(&b, "observed_blocks: %d\n", stats.ObservedBlocks)
-	fmt.Fprintf(&b, "mean_propagation_delay: %.6f\n", stats.MeanPropagationDelay)
-	fmt.Fprintf(&b, "main_chain_blocks: %d\n", stats.MainChainBlocks)
-	fmt.Fprintf(&b, "uncle_blocks: %d\n", stats.UncleBlocks)
-	fmt.Fprintf(&b, "true_orphan_blocks: %d\n", stats.TrueOrphanBlocks)
-	fmt.Fprintf(&b, "orphan_blocks: %d\n", stats.OrphanBlocks)
-	fmt.Fprintf(&b, "orphan_rate: %.6f\n", stats.OrphanRate)
-	fmt.Fprintf(&b, "total_events: %d\n", stats.TotalEvents)
-	fmt.Fprintf(&b, "add_node_events: %d\n", stats.AddNodeEvents)
-	fmt.Fprintf(&b, "add_link_events: %d\n", stats.AddLinkEvents)
-	fmt.Fprintf(&b, "add_block_events: %d\n", stats.AddBlockEvents)
-	fmt.Fprintf(&b, "flow_block_events: %d\n", stats.FlowBlockEvents)
-	fmt.Fprintf(&b, "simulation_end_events: %d\n", stats.SimulationEndEvents)
-	fmt.Fprintf(&b, "simulation_end_time: %d\n", stats.SimulationEndTime)
+
+	writeMetricLine := func(key, value string) {
+		padding := 24 - len(key)
+		if padding < 1 {
+			padding = 1
+		}
+		fmt.Fprintf(&b, "%s:%s%s\n", key, strings.Repeat(" ", padding), value)
+	}
+
+	b.WriteString("=== SimBlock Metrics ===\n")
+	writeMetricLine("generated_at", time.Now().UTC().Format(time.RFC3339))
+
+	b.WriteString("\n[Blocks]\n")
+	writeMetricLine("accepted_blocks", fmt.Sprintf("%d", stats.AcceptedBlocks))
+	writeMetricLine("observed_blocks", fmt.Sprintf("%d", stats.ObservedBlocks))
+	writeMetricLine("main_chain_blocks", fmt.Sprintf("%d", stats.MainChainBlocks))
+	writeMetricLine("uncle_blocks", fmt.Sprintf("%d", stats.UncleBlocks))
+	writeMetricLine("true_orphan_blocks", fmt.Sprintf("%d", stats.TrueOrphanBlocks))
+	writeMetricLine("orphan_blocks", fmt.Sprintf("%d", stats.OrphanBlocks))
+	writeMetricLine("orphan_rate", fmt.Sprintf("%.6f (%.2f%%)", stats.OrphanRate, stats.OrphanRate*100))
+	writeMetricLine("mean_propagation_delay", fmt.Sprintf("%.3f ms", stats.MeanPropagationDelay))
+
+	b.WriteString("\n[Events]\n")
+	writeMetricLine("total_events", fmt.Sprintf("%d", stats.TotalEvents))
+	writeMetricLine("add_node_events", fmt.Sprintf("%d", stats.AddNodeEvents))
+	writeMetricLine("add_link_events", fmt.Sprintf("%d", stats.AddLinkEvents))
+	writeMetricLine("add_block_events", fmt.Sprintf("%d", stats.AddBlockEvents))
+	writeMetricLine("flow_block_events", fmt.Sprintf("%d", stats.FlowBlockEvents))
+	writeMetricLine("simulation_end_events", fmt.Sprintf("%d", stats.SimulationEndEvents))
+	writeMetricLine("simulation_end_time", fmt.Sprintf("%d", stats.SimulationEndTime))
 	return b.String()
 }
 

@@ -31,6 +31,7 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 ```
 
 默认输出会写入 `output/` 目录。
+默认 `output_mode=core`，仅保存核心结果 `metrics.txt`（最省空间）。
 
 ## 3. 命令行参数
 
@@ -45,6 +46,7 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 - `--end-time`：覆盖 `simulation.end_time`
 - `--end-block-height`：覆盖 `simulation.end_block_height`
 - `--java-compatible`：覆盖 `simulation.java_compatible`
+- `--output-mode`：覆盖 `simulation.output_mode`（`core` 或 `full`）
 - `--network-profile`：覆盖 `network.profile`
 - `--latency-matrix-file`：覆盖 `network.latency_matrix_file`
 
@@ -62,6 +64,7 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 - `simulation.end_time`：普通 Go 模式下的停止时间
 - `simulation.end_block_height`：Java 兼容模式下的停止高度
 - `simulation.java_compatible`：是否启用 Java SimBlock 兼容行为
+- `simulation.output_mode`：输出模式，`core` 仅写核心指标，`full` 写完整调试输出
 - `network.profile`：内置网络 profile 名称，目前支持 `bitcoin_2019`
 - `network.latency_matrix_file`：网络延迟矩阵文件路径
 - `network.upload_bandwidth`：每个地区的上传带宽，单位 bit/s
@@ -89,8 +92,9 @@ make test
 
 主要输出文件：
 
-- `output/output.json`
-- `output/static.json`
-- `output/metrics.json`
+- `output/<run_id>/metrics.txt`（默认，`output_mode=core`）
+- `output/<run_id>/output.txt`（仅 `output_mode=full`）
+- `output/<run_id>/static.txt`（仅 `output_mode=full`）
+- `output/<run_id>/chain_tree.txt`（仅 `output_mode=full`）
 
 这些文件属于运行生成产物，默认不纳入版本控制。

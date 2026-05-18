@@ -53,6 +53,7 @@ func Run(args []string) {
 		BlockSize:          uint64(config.GlobalConfig.Simulation.BlockSize),
 		ForkChoice:         config.GlobalConfig.Simulation.ForkChoice,
 		OutputDir:          runOutputDir,
+		OutputMode:         config.GlobalConfig.Simulation.OutputMode,
 		RandomSeed:         10,
 		ConnectionsPerNode: 8,
 		JavaCompatible:     config.GlobalConfig.Simulation.JavaCompatible,

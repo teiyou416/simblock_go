@@ -19,6 +19,7 @@ type Config struct {
 		EndTime        int64  `mapstructure:"end_time"`
 		EndBlockHeight int    `mapstructure:"end_block_height"`
 		JavaCompatible bool   `mapstructure:"java_compatible"`
+		OutputMode     string `mapstructure:"output_mode"`
 	} `mapstructure:"simulation"`
 	Network struct {
 		LatencyMatrixFile  string    `mapstructure:"latency_matrix_file"`
@@ -54,6 +55,7 @@ func LoadConfig(args []string) (Config, error) {
 	flagSet.Int64("end-time", 0, "override simulation.end_time")
 	flagSet.Int("end-block-height", 0, "override simulation.end_block_height")
 	flagSet.String("java-compatible", "", "override simulation.java_compatible")
+	flagSet.String("output-mode", "", "override simulation.output_mode (core|full)")
 	flagSet.String("latency-matrix-file", "", "override network.latency_matrix_file")
 	flagSet.String("network-profile", "", "override network.profile")
 
@@ -88,6 +90,9 @@ func LoadConfig(args []string) (Config, error) {
 		return Config{}, err
 	}
 	if err := applyBoolOverride(v, flagSet.Lookup("java-compatible"), "simulation.java_compatible"); err != nil {
+		return Config{}, err
+	}
+	if err := applyStringOverride(v, flagSet.Lookup("output-mode"), "simulation.output_mode"); err != nil {
 		return Config{}, err
 	}
 	if err := applyStringOverride(v, flagSet.Lookup("latency-matrix-file"), "network.latency_matrix_file"); err != nil {

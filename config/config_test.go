@@ -17,6 +17,7 @@ func TestLoadConfigAppliesCLIOverrides(t *testing.T) {
   end_time: 100000000
   end_block_height: 3
   java_compatible: true
+  output_mode: full
 
 network:
   profile: bitcoin_2019
@@ -39,6 +40,7 @@ network:
 		"--end-time", "9999",
 		"--end-block-height", "7",
 		"--java-compatible", "false",
+		"--output-mode", "core",
 		"--latency-matrix-file", "./custom/latency.txt",
 		"--network-profile", "custom_profile",
 	})
@@ -66,6 +68,9 @@ network:
 	}
 	if cfg.Simulation.JavaCompatible {
 		t.Fatalf("java compatible = %v, want false", cfg.Simulation.JavaCompatible)
+	}
+	if cfg.Simulation.OutputMode != "core" {
+		t.Fatalf("output mode = %q, want %q", cfg.Simulation.OutputMode, "core")
 	}
 	if cfg.Network.LatencyMatrixFile != "./custom/latency.txt" {
 		t.Fatalf("latency matrix file = %q, want %q", cfg.Network.LatencyMatrixFile, "./custom/latency.txt")

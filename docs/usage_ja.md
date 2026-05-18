@@ -31,6 +31,7 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 ```
 
 デフォルトの出力先は `output/` です。
+デフォルトの `output_mode=core` では、`metrics.txt` のみ保存されます（最小容量）。
 
 ## 3. パラメータ
 
@@ -45,6 +46,7 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 - `--end-time`: `simulation.end_time` を上書き
 - `--end-block-height`: `simulation.end_block_height` を上書き
 - `--java-compatible`: `simulation.java_compatible` を上書き
+- `--output-mode`: `simulation.output_mode`（`core` または `full`）を上書き
 - `--network-profile`: `network.profile` を上書き
 - `--latency-matrix-file`: `network.latency_matrix_file` を上書き
 
@@ -62,6 +64,7 @@ go run ./cmd/simblock --config ./config/simulator.yaml --latency-matrix-file ./d
 - `simulation.end_time`: 通常の Go モードで使う終了時刻
 - `simulation.end_block_height`: Java 互換モードで使う終了ブロック高
 - `simulation.java_compatible`: Java SimBlock 互換挙動を有効にするか
+- `simulation.output_mode`: 出力モード。`core` は主要メトリクスのみ、`full` は完全なデバッグ出力
 - `network.profile`: 組み込みネットワーク profile 名。現在は `bitcoin_2019` をサポート
 - `network.latency_matrix_file`: ネットワーク遅延行列ファイルのパス
 - `network.upload_bandwidth`: 各リージョンのアップロード帯域（bit/s）
@@ -89,8 +92,9 @@ make test
 
 主な出力ファイル：
 
-- `output/output.json`
-- `output/static.json`
-- `output/metrics.json`
+- `output/<run_id>/metrics.txt`（デフォルト、`output_mode=core`）
+- `output/<run_id>/output.txt`（`output_mode=full` のみ）
+- `output/<run_id>/static.txt`（`output_mode=full` のみ）
+- `output/<run_id>/chain_tree.txt`（`output_mode=full` のみ）
 
 これらのファイルは実行時に生成され、通常は Git 管理対象に含めません。

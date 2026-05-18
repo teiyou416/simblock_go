@@ -80,6 +80,7 @@ func TestIntegratedSuite(t *testing.T) {
 			EndTime:            8_000,
 			BlockSize:          535000,
 			OutputDir:          outDir,
+			OutputMode:         engine.OutputModeCore,
 			RandomSeed:         10,
 			ConnectionsPerNode: 2,
 		}, timer, testNetworkModel())
@@ -92,9 +93,12 @@ func TestIntegratedSuite(t *testing.T) {
 			t.Fatal("expected accepted blocks > 0")
 		}
 
-		for _, name := range []string{"output.txt", "static.txt", "metrics.txt", "chain_tree.txt"} {
-			if _, err := os.Stat(filepath.Join(outDir, name)); err != nil {
-				t.Fatalf("missing output file %s: %v", name, err)
+		if _, err := os.Stat(filepath.Join(outDir, "metrics.txt")); err != nil {
+			t.Fatalf("missing output file metrics.txt: %v", err)
+		}
+		for _, name := range []string{"output.txt", "static.txt", "chain_tree.txt"} {
+			if _, err := os.Stat(filepath.Join(outDir, name)); !os.IsNotExist(err) {
+				t.Fatalf("expected output file %s to be absent in core mode, err=%v", name, err)
 			}
 		}
 
@@ -106,6 +110,33 @@ func TestIntegratedSuite(t *testing.T) {
 		metrics := string(metricsRaw)
 		if !strings.Contains(metrics, "accepted_blocks:") {
 			t.Fatal("expected metrics.txt to contain accepted_blocks")
+		}
+
+	})
+
+	t.Run("simulator_full_mode_outputs_all_files", func(t *testing.T) {
+		timer := engine.NewTimer()
+		outDir := t.TempDir()
+
+		sim := engine.NewSimulator(engine.SimulatorConfig{
+			NumNodes:           16,
+			TargetInterval:     50,
+			EndTime:            8_000,
+			BlockSize:          535000,
+			OutputDir:          outDir,
+			OutputMode:         engine.OutputModeFull,
+			RandomSeed:         10,
+			ConnectionsPerNode: 2,
+		}, timer, testNetworkModel())
+
+		if _, err := sim.Run(); err != nil {
+			t.Fatalf("simulator run failed: %v", err)
+		}
+
+		for _, name := range []string{"output.txt", "static.txt", "metrics.txt", "chain_tree.txt"} {
+			if _, err := os.Stat(filepath.Join(outDir, name)); err != nil {
+				t.Fatalf("missing output file %s: %v", name, err)
+			}
 		}
 
 		chainTreeTextPath := filepath.Join(outDir, "chain_tree.txt")
