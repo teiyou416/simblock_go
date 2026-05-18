@@ -1,10 +1,11 @@
 package engine
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/teiyou416/simblock_go/core"
@@ -41,6 +42,28 @@ type Stats struct {
 	FlowBlockEvents      int     `json:"flow_block_events"`
 	SimulationEndEvents  int     `json:"simulation_end_events"`
 	SimulationEndTime    int64   `json:"simulation_end_time"`
+}
+
+type chainTreeSnapshot struct {
+	GeneratedAt time.Time       `json:"generated_at"`
+	BestTipID   *uint64         `json:"best_tip_id,omitempty"`
+	RootIDs     []uint64        `json:"root_ids"`
+	Nodes       []chainTreeNode `json:"nodes"`
+	Edges       []chainTreeEdge `json:"edges"`
+}
+
+type chainTreeNode struct {
+	BlockID     uint64       `json:"block_id"`
+	ParentID    *uint64      `json:"parent_id"`
+	Height      uint64       `json:"height"`
+	MinterID    int          `json:"minter_id"`
+	Timestamp   core.SimTime `json:"timestamp"`
+	OnBestChain bool         `json:"on_best_chain"`
+}
+
+type chainTreeEdge struct {
+	ParentID uint64 `json:"parent_id"`
+	ChildID  uint64 `json:"child_id"`
 }
 
 type Simulator struct {
@@ -128,6 +151,7 @@ func (s *Simulator) setupSimple(regionCount int) error {
 		n.BindEnvironment(s.timer, s.network)
 		n.SetCompactBlockRelay(true)
 		n.SetCompactFailureRate(0.13)
+		n.SetBlockSize(s.cfg.BlockSize)
 		n.SetBlockAcceptedObserver(s.onBlockAccepted)
 		n.SetFlowObserver(s.onFlowBlock)
 		n.SetRNG(s.rng)
@@ -166,6 +190,7 @@ func (s *Simulator) setupJavaCompatible(regionCount int) error {
 		n.SetNumConnections(numConn)
 		n.SetCompactBlockRelay(useCBR)
 		n.SetChurnNode(isChurn)
+		n.SetBlockSize(s.cfg.BlockSize)
 		if isChurn {
 			n.SetCompactFailureRate(0.27)
 		} else {
@@ -453,40 +478,218 @@ func (s *Simulator) writeOutputs(stats Stats) error {
 		return err
 	}
 
-	outputPath := filepath.Join(s.cfg.OutputDir, "output.json")
-	if err := writeJSONFile(outputPath, s.events); err != nil {
+	outputPath := filepath.Join(s.cfg.OutputDir, "output.txt")
+	if err := writeTextFile(outputPath, buildEventsText(s.events)); err != nil {
 		return err
 	}
 
-	staticRegions := make([]map[string]any, 0, len(network.DefaultRegions))
-	for _, r := range network.DefaultRegions {
-		staticRegions = append(staticRegions, map[string]any{
-			"id":   r.ID,
-			"name": r.Name,
-		})
-	}
-	staticPath := filepath.Join(s.cfg.OutputDir, "static.json")
-	if err := writeJSONFile(staticPath, map[string]any{"region": staticRegions}); err != nil {
+	staticPath := filepath.Join(s.cfg.OutputDir, "static.txt")
+	if err := writeTextFile(staticPath, buildStaticText()); err != nil {
 		return err
 	}
 
-	metricsPath := filepath.Join(s.cfg.OutputDir, "metrics.json")
-	if err := writeJSONFile(metricsPath, map[string]any{
-		"generated_at": time.Now().UTC().Format(time.RFC3339),
-		"stats":        stats,
-	}); err != nil {
+	metricsPath := filepath.Join(s.cfg.OutputDir, "metrics.txt")
+	if err := writeTextFile(metricsPath, buildMetricsText(stats)); err != nil {
+		return err
+	}
+
+	chainTreeTextPath := filepath.Join(s.cfg.OutputDir, "chain_tree.txt")
+	if err := writeTextFile(chainTreeTextPath, buildChainTreeText(s.buildChainTreeSnapshot())); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func writeJSONFile(path string, v any) error {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
+func (s *Simulator) buildChainTreeSnapshot() chainTreeSnapshot {
+	ids := make([]uint64, 0, len(s.seenBlocks))
+	for id := range s.seenBlocks {
+		ids = append(ids, id)
 	}
-	return os.WriteFile(path, b, 0o644)
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	bestChain := canonicalChainSet(s.bestTip())
+	nodes := make([]chainTreeNode, 0, len(ids))
+	edges := make([]chainTreeEdge, 0, len(ids))
+	rootIDs := make([]uint64, 0, 1)
+
+	for _, id := range ids {
+		b := s.seenBlocks[id]
+		var parentID *uint64
+		if pid, ok := b.ParentID(); ok {
+			pidCopy := pid
+			parentID = &pidCopy
+			edges = append(edges, chainTreeEdge{
+				ParentID: pid,
+				ChildID:  id,
+			})
+		} else {
+			rootIDs = append(rootIDs, id)
+		}
+		_, onBestChain := bestChain[id]
+		nodes = append(nodes, chainTreeNode{
+			BlockID:     id,
+			ParentID:    parentID,
+			Height:      b.Height(),
+			MinterID:    b.MinterID(),
+			Timestamp:   b.Time(),
+			OnBestChain: onBestChain,
+		})
+	}
+
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].ParentID != edges[j].ParentID {
+			return edges[i].ParentID < edges[j].ParentID
+		}
+		return edges[i].ChildID < edges[j].ChildID
+	})
+	sort.Slice(rootIDs, func(i, j int) bool { return rootIDs[i] < rootIDs[j] })
+
+	snapshot := chainTreeSnapshot{
+		GeneratedAt: time.Now().UTC(),
+		RootIDs:     rootIDs,
+		Nodes:       nodes,
+		Edges:       edges,
+	}
+	if bestTip := s.bestTip(); bestTip != nil {
+		bestTipID := bestTip.ID()
+		snapshot.BestTipID = &bestTipID
+	}
+	return snapshot
+}
+
+func writeTextFile(path, body string) error {
+	return os.WriteFile(path, []byte(body), 0o644)
+}
+
+func buildEventsText(events []map[string]any) string {
+	var b strings.Builder
+	for i, event := range events {
+		kind, _ := event["kind"].(string)
+		fmt.Fprintf(&b, "[%d] kind=%s", i, kind)
+		content, _ := event["content"].(map[string]any)
+		if len(content) > 0 {
+			keys := make([]string, 0, len(content))
+			for k := range content {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				fmt.Fprintf(&b, " %s=%v", k, content[k])
+			}
+		}
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func buildStaticText() string {
+	var b strings.Builder
+	b.WriteString("region_id\tname\n")
+	for _, r := range network.DefaultRegions {
+		fmt.Fprintf(&b, "%d\t%s\n", r.ID, r.Name)
+	}
+	return b.String()
+}
+
+func buildMetricsText(stats Stats) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "generated_at: %s\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(&b, "accepted_blocks: %d\n", stats.AcceptedBlocks)
+	fmt.Fprintf(&b, "observed_blocks: %d\n", stats.ObservedBlocks)
+	fmt.Fprintf(&b, "mean_propagation_delay: %.6f\n", stats.MeanPropagationDelay)
+	fmt.Fprintf(&b, "orphan_blocks: %d\n", stats.OrphanBlocks)
+	fmt.Fprintf(&b, "orphan_rate: %.6f\n", stats.OrphanRate)
+	fmt.Fprintf(&b, "total_events: %d\n", stats.TotalEvents)
+	fmt.Fprintf(&b, "add_node_events: %d\n", stats.AddNodeEvents)
+	fmt.Fprintf(&b, "add_link_events: %d\n", stats.AddLinkEvents)
+	fmt.Fprintf(&b, "add_block_events: %d\n", stats.AddBlockEvents)
+	fmt.Fprintf(&b, "flow_block_events: %d\n", stats.FlowBlockEvents)
+	fmt.Fprintf(&b, "simulation_end_events: %d\n", stats.SimulationEndEvents)
+	fmt.Fprintf(&b, "simulation_end_time: %d\n", stats.SimulationEndTime)
+	return b.String()
+}
+
+func buildChainTreeText(snapshot chainTreeSnapshot) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "generated_at: %s\n", snapshot.GeneratedAt.Format(time.RFC3339))
+	if snapshot.BestTipID != nil {
+		fmt.Fprintf(&b, "best_tip_id: %d\n", *snapshot.BestTipID)
+	} else {
+		b.WriteString("best_tip_id: none\n")
+	}
+	fmt.Fprintf(&b, "nodes: %d\n", len(snapshot.Nodes))
+	fmt.Fprintf(&b, "edges: %d\n", len(snapshot.Edges))
+	b.WriteString("tree_compressed:\n")
+
+	children := make(map[uint64][]uint64, len(snapshot.Nodes))
+	nodeByID := make(map[uint64]chainTreeNode, len(snapshot.Nodes))
+	for _, n := range snapshot.Nodes {
+		nodeByID[n.BlockID] = n
+	}
+	for _, e := range snapshot.Edges {
+		children[e.ParentID] = append(children[e.ParentID], e.ChildID)
+	}
+	for id := range children {
+		sort.Slice(children[id], func(i, j int) bool { return children[id][i] < children[id][j] })
+	}
+
+	var walk func(id uint64, prefix string, isLast bool)
+	walk = func(id uint64, prefix string, isLast bool) {
+		start, ok := nodeByID[id]
+		if !ok {
+			return
+		}
+
+		branch := "+- "
+		nextPrefix := prefix + "|  "
+		if isLast {
+			branch = "\\- "
+			nextPrefix = prefix + "   "
+		}
+
+		end := start
+		allBest := start.OnBestChain
+		for len(children[end.BlockID]) == 1 {
+			nextID := children[end.BlockID][0]
+			nextNode, exists := nodeByID[nextID]
+			if !exists {
+				break
+			}
+			end = nextNode
+			allBest = allBest && nextNode.OnBestChain
+			if len(children[end.BlockID]) != 1 {
+				break
+			}
+		}
+
+		bestMark := ""
+		if allBest {
+			bestMark = " *best"
+		}
+		if start.BlockID == end.BlockID {
+			fmt.Fprintf(&b, "%s%sblock=%d h=%d minter=%d ts=%d%s\n",
+				prefix, branch, start.BlockID, start.Height, start.MinterID, start.Timestamp, bestMark)
+		} else {
+			fmt.Fprintf(&b, "%s%spath %d(h=%d)->%d(h=%d) len=%d%s\n",
+				prefix, branch,
+				start.BlockID, start.Height,
+				end.BlockID, end.Height,
+				end.Height-start.Height+1,
+				bestMark,
+			)
+		}
+
+		kids := children[end.BlockID]
+		for i, childID := range kids {
+			walk(childID, nextPrefix, i == len(kids)-1)
+		}
+	}
+
+	for i, rootID := range snapshot.RootIDs {
+		walk(rootID, "", i == len(snapshot.RootIDs)-1)
+	}
+	return b.String()
 }
 
 func (s *Simulator) makeRandomListFollowDistribution(distribution []float64, cumulative bool) []int {

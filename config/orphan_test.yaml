@@ -5,7 +5,7 @@ simulation:
   block_interval: 1000
   block_size: 535000
   end_time: 100000
-  end_block_height: 600
+  end_block_height: 1000
   java_compatible: true
 
 network:

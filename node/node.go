@@ -136,6 +136,13 @@ func (n *Node) SetCompactFailureRate(rate float64) {
 	n.cbrFailureRate = rate
 }
 
+func (n *Node) SetBlockSize(size uint64) {
+	if size == 0 {
+		return
+	}
+	n.blockSize = size
+}
+
 func (n *Node) SetNumConnections(num int) {
 	if num < 0 {
 		num = 0
@@ -236,6 +243,10 @@ func (n *Node) Region() int {
 
 func (n *Node) HashPower() uint64 {
 	return n.hashPower
+}
+
+func (n *Node) BlockSize() uint64 {
+	return n.blockSize
 }
 
 func (n *Node) Tip() *core.Block {

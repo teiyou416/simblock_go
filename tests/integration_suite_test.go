@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/teiyou416/simblock_go/core"
@@ -91,10 +92,33 @@ func TestIntegratedSuite(t *testing.T) {
 			t.Fatal("expected accepted blocks > 0")
 		}
 
-		for _, name := range []string{"output.json", "static.json", "metrics.json"} {
+		for _, name := range []string{"output.txt", "static.txt", "metrics.txt", "chain_tree.txt"} {
 			if _, err := os.Stat(filepath.Join(outDir, name)); err != nil {
 				t.Fatalf("missing output file %s: %v", name, err)
 			}
+		}
+
+		metricsPath := filepath.Join(outDir, "metrics.txt")
+		metricsRaw, err := os.ReadFile(metricsPath)
+		if err != nil {
+			t.Fatalf("failed to read metrics.txt: %v", err)
+		}
+		metrics := string(metricsRaw)
+		if !strings.Contains(metrics, "accepted_blocks:") {
+			t.Fatal("expected metrics.txt to contain accepted_blocks")
+		}
+
+		chainTreeTextPath := filepath.Join(outDir, "chain_tree.txt")
+		textRaw, err := os.ReadFile(chainTreeTextPath)
+		if err != nil {
+			t.Fatalf("failed to read chain_tree.txt: %v", err)
+		}
+		text := string(textRaw)
+		if len(text) == 0 {
+			t.Fatal("expected chain_tree.txt to be non-empty")
+		}
+		if !strings.Contains(text, "tree_compressed:\n") {
+			t.Fatal("expected chain_tree.txt to contain compressed tree section")
 		}
 	})
 }

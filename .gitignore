@@ -1,7 +1,8 @@
 bin/
 
 # Generated simulator outputs
-output/*.json
+#output/*.json
+output/
 output_go_compare/*.json
 
 # OS / editor

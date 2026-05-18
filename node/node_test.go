@@ -46,6 +46,24 @@ func TestNodeHashPower(t *testing.T) {
 	}
 }
 
+func TestSetBlockSize(t *testing.T) {
+	n := node.NewWithHashPower(1, 0, 10)
+	defaultSize := n.BlockSize()
+	if defaultSize == 0 {
+		t.Fatal("default block size should be > 0")
+	}
+
+	n.SetBlockSize(1234)
+	if got, want := n.BlockSize(), uint64(1234); got != want {
+		t.Fatalf("BlockSize() after SetBlockSize: got=%d want=%d", got, want)
+	}
+
+	n.SetBlockSize(0)
+	if got, want := n.BlockSize(), uint64(1234); got != want {
+		t.Fatalf("BlockSize() should not change on zero input: got=%d want=%d", got, want)
+	}
+}
+
 func TestInvRecBlockBroadcastFlow(t *testing.T) {
 	timer := engine.NewTimer()
 	net := network.NewModel(

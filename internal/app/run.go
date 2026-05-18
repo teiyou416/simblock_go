@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 	"time"
 
 	"github.com/teiyou416/simblock_go/config"
@@ -15,6 +16,7 @@ import (
 func Run(args []string) {
 	fmt.Println("Starting SimBlock-Go...")
 	startedAt := time.Now()
+	runOutputDir := filepath.Join("output", startedAt.Format("20060102_150405_000"))
 
 	// Step 1: load configuration.
 	config.InitConfig(args)
@@ -49,7 +51,7 @@ func Run(args []string) {
 		EndTime:            core.SimTime(config.GlobalConfig.Simulation.EndTime),
 		EndBlockHeight:     config.GlobalConfig.Simulation.EndBlockHeight,
 		BlockSize:          uint64(config.GlobalConfig.Simulation.BlockSize),
-		OutputDir:          "output",
+		OutputDir:          runOutputDir,
 		RandomSeed:         10,
 		ConnectionsPerNode: 8,
 		JavaCompatible:     config.GlobalConfig.Simulation.JavaCompatible,
@@ -62,6 +64,7 @@ func Run(args []string) {
 	}
 	log.Printf("Simulation finished.")
 	log.Printf("  wall_clock_duration=%s", time.Since(startedAt).Round(time.Millisecond))
+	log.Printf("  output_dir=%s", runOutputDir)
 	log.Printf(
 		"  events: total=%d add-node=%d add-link=%d add-block=%d flow-block=%d simulation-end=%d",
 		stats.TotalEvents,
